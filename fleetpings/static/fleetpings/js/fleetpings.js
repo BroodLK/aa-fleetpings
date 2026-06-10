@@ -25,11 +25,18 @@ $(document).ready(() => {
         fleetCommander: $('#id_fleet_commander'),
         fleetName: $('#id_fleet_name'),
         formupTime: $('#id_formup_time'),
+        formupTimeMode: $('input[name="fleetpings_formup_time_mode"]'),
+        formupTimeModeContainer: $('.fleetpings-formup-time-mode'),
+        formupTimeDisplay: $('#fleetpings-formup-time-display'),
         formupTimestamp: $('#id_formup_timestamp'),
         formupLocation: $('#id_formup_location'),
         fleetDoctrine: $('#id_fleet_doctrine'),
         fleetDoctrineUrl: $('#id_fleet_doctrine_url'),
         webhookEmbedColor: $('#id_webhook_embed_color')
+    };
+
+    const state = {
+        formupTimeMode: 'eve'
     };
 
     /* Initialize datetime picker */
@@ -71,16 +78,167 @@ $(document).ready(() => {
         },
 
         /**
-         * Get the timestamp for the formup time.
-         * This function converts the formup time to a Unix timestamp in seconds.
+         * Get the label for a formup time mode.
          *
-         * @param {string} formupTime The formup time in a format recognized by the Date constructor.
+         * @param {string} mode The formup time mode.
+         * @returns {string} The translated label for the mode.
+         */
+        getFormupTimeModeLabel: (mode) => {
+            const attribute = mode === 'eve' ? 'data-eve-label' : 'data-local-label';
+
+            return elements.formupTimeModeContainer.attr(attribute);
+        },
+
+        /**
+         * Get the placeholder for a formup time mode.
+         *
+         * @param {string} mode The formup time mode.
+         * @returns {string} The translated placeholder for the mode.
+         */
+        getFormupTimePlaceholder: (mode) => {
+            const attribute = mode === 'eve' ? 'data-eve-placeholder' : 'data-local-placeholder';
+
+            return elements.formupTimeModeContainer.attr(attribute);
+        },
+
+        /**
+         * Get the translated invalid formup time message.
+         *
+         * @returns {string} The translated invalid formup time message.
+         */
+        getInvalidFormupTimeMessage: () => {
+            return elements.formupTimeModeContainer.attr('data-invalid-formup-time');
+        },
+
+        /**
+         * Get the translated past formup time message.
+         *
+         * @returns {string} The translated past formup time message.
+         */
+        getPastFormupTimeMessage: () => {
+            return elements.formupTimeModeContainer.attr('data-time-in-past');
+        },
+
+        /**
+         * Format a date time part with a leading zero.
+         *
+         * @param {number} value The value to format.
+         * @returns {string} The formatted value.
+         */
+        formatDateTimePart: (value) => {
+            return String(value).padStart(2, '0');
+        },
+
+        /**
+         * Parse the formup time based on the selected time mode.
+         *
+         * @param {string} formupTime The formup time in `Y-m-d H:i` format.
+         * @param {string} mode The formup time mode.
+         * @returns {Date|null} The parsed date or null if the value is invalid.
+         */
+        parseFormupTime: (formupTime, mode) => {
+            const matchedTime = utils.sanitizeInput(formupTime).match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/);
+
+            if (!matchedTime) {
+                return null;
+            }
+
+            const year = Number(matchedTime[1]);
+            const month = Number(matchedTime[2]);
+            const day = Number(matchedTime[3]);
+            const hours = Number(matchedTime[4]);
+            const minutes = Number(matchedTime[5]);
+
+            if (mode === 'eve') {
+                const formupDateTime = new Date(Date.UTC(year, month - 1, day, hours, minutes));
+
+                if (
+                    formupDateTime.getUTCFullYear() !== year ||
+                    formupDateTime.getUTCMonth() !== month - 1 ||
+                    formupDateTime.getUTCDate() !== day ||
+                    formupDateTime.getUTCHours() !== hours ||
+                    formupDateTime.getUTCMinutes() !== minutes
+                ) {
+                    return null;
+                }
+
+                return formupDateTime;
+            }
+
+            const formupDateTime = new Date(year, month - 1, day, hours, minutes);
+
+            if (
+                formupDateTime.getFullYear() !== year ||
+                formupDateTime.getMonth() !== month - 1 ||
+                formupDateTime.getDate() !== day ||
+                formupDateTime.getHours() !== hours ||
+                formupDateTime.getMinutes() !== minutes
+            ) {
+                return null;
+            }
+
+            return formupDateTime;
+        },
+
+        /**
+         * Format the formup time for the selected mode.
+         *
+         * @param {Date} formupDateTime The formup date time.
+         * @param {string} mode The formup time mode.
+         * @returns {string} The formatted formup time.
+         */
+        formatFormupTime: (formupDateTime, mode) => {
+            const year = mode === 'eve' ? formupDateTime.getUTCFullYear() : formupDateTime.getFullYear();
+            const month = mode === 'eve' ? formupDateTime.getUTCMonth() + 1 : formupDateTime.getMonth() + 1;
+            const day = mode === 'eve' ? formupDateTime.getUTCDate() : formupDateTime.getDate();
+            const hours = mode === 'eve' ? formupDateTime.getUTCHours() : formupDateTime.getHours();
+            const minutes = mode === 'eve' ? formupDateTime.getUTCMinutes() : formupDateTime.getMinutes();
+
+            return `${year}-${utils.formatDateTimePart(month)}-${utils.formatDateTimePart(day)} ${utils.formatDateTimePart(hours)}:${utils.formatDateTimePart(minutes)}`;
+        },
+
+        /**
+         * Get the timestamp for the formup time.
+         *
+         * @param {Date} formupDateTime The formup date time.
          * @returns {number} The Unix timestamp in seconds.
          */
-        getFormupTimestamp: (formupTime) => {
-            const formupDateTime = new Date(formupTime);
+        getFormupTimestamp: (formupDateTime) => {
+            return Math.floor(formupDateTime.getTime() / 1000);
+        },
 
-            return (formupDateTime.getTime() - formupDateTime.getTimezoneOffset() * 60 * 1000) / 1000;
+        /**
+         * Format a relative time string similar to Discord relative timestamps.
+         *
+         * @param {number} timestamp The Unix timestamp in seconds.
+         * @returns {string} The formatted relative time string.
+         */
+        formatRelativeTime: (timestamp) => {
+            const now = Math.floor(Date.now() / 1000);
+            const difference = timestamp - now;
+            const absoluteDifference = Math.abs(difference);
+            const formatter = new Intl.RelativeTimeFormat(fleetpingsSettings.dateTimeLocale, {
+                numeric: 'always'
+            });
+
+            const units = [
+                {unit: 'year', seconds: 31536000},
+                {unit: 'month', seconds: 2592000},
+                {unit: 'day', seconds: 86400},
+                {unit: 'hour', seconds: 3600},
+                {unit: 'minute', seconds: 60}
+            ];
+
+            for (const timeUnit of units) {
+                if (absoluteDifference >= timeUnit.seconds) {
+                    return formatter.format(
+                        Math.round(difference / timeUnit.seconds),
+                        timeUnit.unit
+                    );
+                }
+            }
+
+            return formatter.format(difference, 'second');
         },
 
         /**
@@ -201,6 +359,19 @@ $(document).ready(() => {
     /* Event Handlers */
     const handlers = {
         /**
+         * Clear the rendered formup time helper.
+         *
+         * @returns {void}
+         */
+        clearFormupTimeDisplay: () => {
+            elements.formupTimestamp.val('');
+            elements.formupTimeDisplay
+                .text('')
+                .removeClass('text-danger text-muted')
+                .hide();
+        },
+
+        /**
          * Update the visibility of checkboxes based on the current state of other checkboxes.
          *
          * @returns {void}
@@ -256,6 +427,67 @@ $(document).ready(() => {
         },
 
         /**
+         * Update the formup time helper and canonical timestamp.
+         *
+         * @returns {void}
+         */
+        updateFormupTimeDisplay: () => {
+            const formupTime = utils.sanitizeInput(elements.formupTime.val());
+
+            if (elements.formupTime.prop('disabled') || !formupTime) {
+                handlers.clearFormupTimeDisplay();
+
+                return;
+            }
+
+            const formupDateTime = utils.parseFormupTime(formupTime, state.formupTimeMode);
+
+            if (!formupDateTime) {
+                handlers.clearFormupTimeDisplay();
+
+                return;
+            }
+
+            const timestamp = utils.getFormupTimestamp(formupDateTime);
+            const oppositeMode = state.formupTimeMode === 'eve' ? 'local' : 'eve';
+            const oppositeTime = utils.formatFormupTime(formupDateTime, oppositeMode);
+            const isPast = timestamp < Math.floor(Date.now() / 1000);
+            const relativeTime = utils.formatRelativeTime(timestamp);
+            const helperText = isPast
+                ? `${utils.getFormupTimeModeLabel(oppositeMode)}: ${oppositeTime} - ${utils.getPastFormupTimeMessage()}`
+                : `${utils.getFormupTimeModeLabel(oppositeMode)}: ${oppositeTime} (${relativeTime})`;
+
+            elements.formupTimestamp.val(timestamp);
+            elements.formupTimeDisplay
+                .text(helperText)
+                .removeClass('text-danger text-muted')
+                .addClass(isPast ? 'text-danger' : 'text-muted')
+                .show();
+        },
+
+        /**
+         * Set the formup time mode and convert an already entered value.
+         *
+         * @returns {void}
+         */
+        setFormupTimeMode: () => {
+            const selectedMode = elements.formupTimeMode.filter(':checked').val() || 'eve';
+            const currentFormupTime = utils.sanitizeInput(elements.formupTime.val());
+            const formupDateTime = currentFormupTime
+                ? utils.parseFormupTime(currentFormupTime, state.formupTimeMode)
+                : null;
+
+            state.formupTimeMode = selectedMode;
+            elements.formupTime.attr('placeholder', utils.getFormupTimePlaceholder(selectedMode));
+
+            if (formupDateTime) {
+                elements.formupTime.val(utils.formatFormupTime(formupDateTime, selectedMode));
+            }
+
+            handlers.updateFormupTimeDisplay();
+        },
+
+        /**
          * Submit the fleet ping form.
          * This function handles the form submission, validates the input fields, and sends the data to the server.
          * It also handles the response and displays appropriate messages to the user.
@@ -301,12 +533,37 @@ $(document).ready(() => {
                 }
             }
 
+            const formupTimeValue = utils.sanitizeInput(elements.formupTime.val());
+            const formupDateTime = !elements.formupTimeNow.is(':checked') && formupTimeValue
+                ? utils.parseFormupTime(formupTimeValue, state.formupTimeMode)
+                : null;
+
+            if (!elements.formupTimeNow.is(':checked') && formupTimeValue && !formupDateTime) {
+                utils.showMessage(
+                    utils.getInvalidFormupTimeMessage(),
+                    '.fleetpings-form-message',
+                    'error'
+                );
+
+                return;
+            }
+
             try {
                 const formData = $('#aa-fleetping-form').serializeArray().reduce((obj, item) => {
                     obj[item.name] = item.value;
 
                     return obj;
                 }, {});
+
+                delete formData.fleetpings_formup_time_mode;
+
+                if (elements.formupTimeNow.is(':checked') || !formupTimeValue) {
+                    formData.formup_time = '';
+                    formData.formup_timestamp = '';
+                } else {
+                    formData.formup_time = utils.formatFormupTime(formupDateTime, 'eve');
+                    formData.formup_timestamp = String(utils.getFormupTimestamp(formupDateTime));
+                }
 
                 const data = await fetchPost({
                     url: fleetpingsSettings.url.fleetPing,
@@ -350,11 +607,9 @@ $(document).ready(() => {
         $('.hint-ping-everyone').toggle(elements.pingTarget.val() === '@everyone');
     });
 
-    elements.formupTime.on('change', () => {
-        const timestamp = utils.getFormupTimestamp(utils.sanitizeInput(elements.formupTime.val()));
+    elements.formupTime.on('input change', handlers.updateFormupTimeDisplay);
 
-        elements.formupTimestamp.val(timestamp);
-    });
+    elements.formupTimeMode.on('change', handlers.setFormupTimeMode);
 
     elements.fleetType.on('change', () => {
         const selectedOption = $('option:selected', elements.fleetType);
@@ -370,6 +625,7 @@ $(document).ready(() => {
         elements.formupTime.prop('disabled', !isChecked);
 
         handlers.updateCheckboxVisibility();
+        handlers.updateFormupTimeDisplay();
     });
 
     elements.formupTimeNow.on('change', () => {
@@ -379,6 +635,7 @@ $(document).ready(() => {
         elements.formupTime.prop('disabled', isChecked);
 
         handlers.updateCheckboxVisibility();
+        handlers.updateFormupTimeDisplay();
     });
 
     if (fleetpingsSettings.srpModuleAvailableToUser) {
@@ -414,7 +671,9 @@ $(document).ready(() => {
     });
 
     /* Initialize */
+    state.formupTimeMode = elements.formupTimeMode.filter(':checked').val() || 'eve';
     handlers.updateCheckboxVisibility();
+    handlers.setFormupTimeMode();
     dataLoader.initialize()
         .then(() => console.log('Fleetpings form initialized'))
         .catch((error) => console.error('Error initializing Fleetpings form:', error));

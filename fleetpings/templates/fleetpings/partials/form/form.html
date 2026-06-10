@@ -32,6 +32,54 @@
 
         <!-- formup_time -->
         {% bootstrap_field form.formup_time %}
+        <div
+            class="mb-3 fleetpings-formup-time-mode"
+            data-eve-label="{% translate 'EVE time' %}"
+            data-local-label="{% translate 'Local time' %}"
+            data-eve-placeholder="{% translate 'Formup time (EVE time)' %}"
+            data-local-placeholder="{% translate 'Formup time (Local time)' %}"
+            data-invalid-formup-time="{% translate 'Please provide a valid formup time.' %}"
+            data-time-in-past="{% translate 'Chosen time is in the past' %}"
+        >
+            <label class="form-label">
+                {% translate "Time zone" %}
+            </label>
+
+            <div>
+                <div class="form-check form-check-inline">
+                    <input
+                        id="id_formup_time_mode_eve"
+                        class="form-check-input"
+                        type="radio"
+                        name="fleetpings_formup_time_mode"
+                        value="eve"
+                        checked
+                    >
+                    <label class="form-check-label" for="id_formup_time_mode_eve">
+                        {% translate "EVE time" %}
+                    </label>
+                </div>
+
+                <div class="form-check form-check-inline">
+                    <input
+                        id="id_formup_time_mode_local"
+                        class="form-check-input"
+                        type="radio"
+                        name="fleetpings_formup_time_mode"
+                        value="local"
+                    >
+                    <label class="form-check-label" for="id_formup_time_mode_local">
+                        {% translate "Local time" %}
+                    </label>
+                </div>
+            </div>
+
+            <div
+                id="fleetpings-formup-time-display"
+                class="d-block small"
+                style="display: none;"
+            ></div>
+        </div>
         {% bootstrap_field form.formup_timestamp show_label=False %}
 
         <!-- optimer -->
