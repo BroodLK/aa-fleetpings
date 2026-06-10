@@ -50,6 +50,11 @@ ajax_urls = path(
                 view=views.ajax_get_fleet_doctrines,
                 name="ajax_get_fleet_doctrines",
             ),
+            path(
+                route="get-optimer-overlap/",
+                view=views.ajax_get_optimer_overlap,
+                name="ajax_get_optimer_overlap",
+            ),
         ]
     ),
 )

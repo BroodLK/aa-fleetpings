@@ -6,13 +6,14 @@ The views
 
 # Standard Library
 import json
+from datetime import datetime, timedelta, timezone as datetime_timezone
 
 # Django
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.handlers.wsgi import WSGIRequest
 from django.db.models import Q
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.template.loader import render_to_string
 from django.utils import timezone
@@ -47,6 +48,50 @@ from fleetpings.models import (
 from fleetpings.providers.applogger import AppLogger
 
 logger = AppLogger(my_logger=get_extension_logger(name=__name__))
+
+
+def _get_optimer_overlap(formup_timestamp: str):
+    """
+    Get a conflicting Optimer entry and its relation to the requested start time.
+
+    :param formup_timestamp:
+    :type formup_timestamp:
+    :return:
+    :rtype:
+    """
+
+    if not optimer_installed() or not formup_timestamp:
+        return None, ""
+
+    # Alliance Auth
+    from allianceauth.optimer.models import OpTimer
+
+    try:
+        candidate_start = datetime.fromtimestamp(
+            timestamp=float(formup_timestamp), tz=datetime_timezone.utc
+        )
+    except (TypeError, ValueError):
+        return None, ""
+
+    conflicting_timer = (
+        OpTimer.objects.filter(
+            start__gte=candidate_start - timedelta(minutes=60),
+            start__lte=candidate_start + timedelta(minutes=60),
+        )
+        .order_by("start")
+        .first()
+    )
+
+    if conflicting_timer is None:
+        return None, ""
+
+    if conflicting_timer.start < candidate_start:
+        return conflicting_timer, "before"
+
+    if conflicting_timer.start > candidate_start:
+        return conflicting_timer, "after"
+
+    return conflicting_timer, "exact"
 
 
 @login_required
@@ -281,6 +326,33 @@ def ajax_get_fleet_doctrines(request: WSGIRequest) -> HttpResponse:
 
 @login_required
 @permission_required(perm="fleetpings.basic_access")
+def ajax_get_optimer_overlap(request: WSGIRequest) -> JsonResponse:
+    """
+    Get overlap information for an Optimer entry.
+
+    :param request:
+    :type request:
+    :return:
+    :rtype:
+    """
+
+    conflicting_timer, relation = _get_optimer_overlap(
+        formup_timestamp=request.GET.get("timestamp", "")
+    )
+
+    return JsonResponse(
+        {
+            "has_overlap": bool(conflicting_timer),
+            "timestamp": (
+                int(conflicting_timer.start.timestamp()) if conflicting_timer else None
+            ),
+            "relation": relation,
+        }
+    )
+
+
+@login_required
+@permission_required(perm="fleetpings.basic_access")
 def _create_optimer(request: WSGIRequest, ping_context: dict):
     """
     Create an optimer entry
@@ -455,12 +527,19 @@ def ajax_create_fleet_ping(request: WSGIRequest) -> HttpResponse:
 
             # Create optimer is requested
             if optimer_installed() and ping_context["create_optimer"]:
-                _create_optimer(
-                    request=request,
-                    ping_context=ping_context,
+                conflicting_timer, _overlap_relation = _get_optimer_overlap(
+                    formup_timestamp=form.cleaned_data["formup_timestamp"]
                 )
 
-                context["message"] = str(_("Fleet operations timer has been created…"))
+                if not conflicting_timer:
+                    _create_optimer(
+                        request=request,
+                        ping_context=ping_context,
+                    )
+
+                    context["message"] = str(
+                        _("Fleet operations timer has been created…")
+                    )
 
             # Create an SRP link if requested
             if srp_module_installed() and ping_context["srp"]["create_srp_link"]:

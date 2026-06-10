@@ -28,6 +28,7 @@ $(document).ready(() => {
         formupTimeMode: $('input[name="fleetpings_formup_time_mode"]'),
         formupTimeModeContainer: $('.fleetpings-formup-time-mode'),
         formupTimeDisplay: $('#fleetpings-formup-time-display'),
+        optimerOverlapWarning: $('#fleetpings-optimer-overlap-warning'),
         formupTimestamp: $('#id_formup_timestamp'),
         formupLocation: $('#id_formup_location'),
         fleetDoctrine: $('#id_fleet_doctrine'),
@@ -36,7 +37,10 @@ $(document).ready(() => {
     };
 
     const state = {
-        formupTimeMode: 'eve'
+        formupTimeMode: 'eve',
+        optimerOverlapCandidateTimestamp: null,
+        optimerOverlapConflictTimestamp: null,
+        optimerOverlapRelation: ''
     };
 
     /* Initialize datetime picker */
@@ -117,6 +121,26 @@ $(document).ready(() => {
          */
         getPastFormupTimeMessage: () => {
             return elements.formupTimeModeContainer.attr('data-time-in-past');
+        },
+
+        /**
+         * Get the translated Optimer overlap warning message.
+         *
+         * @param {number} conflictTimestamp The conflicting Unix timestamp in seconds.
+         * @param {string} relation The relation of the conflicting timer to the selected timer.
+         * @returns {string} The translated Optimer overlap warning message.
+         */
+        getOptimerOverlapMessage: (conflictTimestamp, relation) => {
+            const attribute = relation === 'before'
+                ? 'data-before-message'
+                : relation === 'after'
+                    ? 'data-after-message'
+                    : 'data-exact-message';
+            const template = elements.optimerOverlapWarning.attr(attribute);
+            const conflictingDateTime = new Date(conflictTimestamp * 1000);
+            const formattedTime = utils.formatFormupTime(conflictingDateTime, state.formupTimeMode);
+
+            return template.replace('__start__', formattedTime);
         },
 
         /**
@@ -372,6 +396,20 @@ $(document).ready(() => {
         },
 
         /**
+         * Clear the stored Optimer overlap warning.
+         *
+         * @returns {void}
+         */
+        clearOptimerOverlapWarning: () => {
+            state.optimerOverlapCandidateTimestamp = null;
+            state.optimerOverlapConflictTimestamp = null;
+            state.optimerOverlapRelation = '';
+            elements.optimerOverlapWarning
+                .text('')
+                .hide();
+        },
+
+        /**
          * Update the visibility of checkboxes based on the current state of other checkboxes.
          *
          * @returns {void}
@@ -466,6 +504,103 @@ $(document).ready(() => {
         },
 
         /**
+         * Render the Optimer overlap warning above the Optimer checkbox.
+         *
+         * @returns {void}
+         */
+        renderOptimerOverlapWarning: () => {
+            const formupTime = utils.sanitizeInput(elements.formupTime.val());
+            const formupDateTime = formupTime
+                ? utils.parseFormupTime(formupTime, state.formupTimeMode)
+                : null;
+            const timestamp = formupDateTime
+                ? utils.getFormupTimestamp(formupDateTime)
+                : null;
+            const hasOptimerOverlap = (
+                timestamp &&
+                state.optimerOverlapCandidateTimestamp === timestamp &&
+                state.optimerOverlapConflictTimestamp &&
+                state.optimerOverlapRelation
+            );
+
+            if (
+                !fleetpingsSettings.optimerInstalled ||
+                !elements.createOptimer.length ||
+                !elements.createOptimer.is(':checked') ||
+                elements.formupTime.prop('disabled') ||
+                !hasOptimerOverlap
+            ) {
+                elements.optimerOverlapWarning
+                    .text('')
+                    .hide();
+
+                return;
+            }
+
+            elements.optimerOverlapWarning
+                .text(
+                    utils.getOptimerOverlapMessage(
+                        state.optimerOverlapConflictTimestamp,
+                        state.optimerOverlapRelation
+                    )
+                )
+                .show();
+        },
+
+        /**
+         * Update the Optimer overlap warning for the current formup time.
+         *
+         * @returns {Promise<void>} A promise that resolves when the overlap warning has been updated.
+         */
+        updateOptimerOverlapWarning: async () => {
+            const formupTime = utils.sanitizeInput(elements.formupTime.val());
+
+            if (
+                !fleetpingsSettings.optimerInstalled ||
+                !elements.createOptimer.length ||
+                !elements.createOptimer.is(':checked') ||
+                elements.formupTime.prop('disabled') ||
+                !formupTime
+            ) {
+                handlers.clearOptimerOverlapWarning();
+                handlers.updateFormupTimeDisplay();
+                handlers.renderOptimerOverlapWarning();
+
+                return;
+            }
+
+            const formupDateTime = utils.parseFormupTime(formupTime, state.formupTimeMode);
+
+            if (!formupDateTime) {
+                handlers.clearOptimerOverlapWarning();
+                handlers.updateFormupTimeDisplay();
+                handlers.renderOptimerOverlapWarning();
+
+                return;
+            }
+
+            const timestamp = utils.getFormupTimestamp(formupDateTime);
+
+            try {
+                const data = await fetchGet({
+                    url: `${fleetpingsSettings.url.optimerOverlap}?timestamp=${timestamp}`,
+                    responseIsJson: true
+                });
+
+                state.optimerOverlapCandidateTimestamp = timestamp;
+                state.optimerOverlapConflictTimestamp = data.timestamp || null;
+                state.optimerOverlapRelation = data.relation || '';
+            } catch (error) {
+                console.error('Error loading Optimer overlap warning:', error);
+
+                handlers.clearOptimerOverlapWarning();
+            }
+
+            handlers.updateFormupTimeDisplay();
+            handlers.renderOptimerOverlapWarning();
+        },
+
+        /**
          * Set the formup time mode and convert an already entered value.
          *
          * @returns {void}
@@ -485,6 +620,8 @@ $(document).ready(() => {
             }
 
             handlers.updateFormupTimeDisplay();
+            handlers.renderOptimerOverlapWarning();
+            handlers.updateOptimerOverlapWarning();
         },
 
         /**
@@ -607,7 +744,10 @@ $(document).ready(() => {
         $('.hint-ping-everyone').toggle(elements.pingTarget.val() === '@everyone');
     });
 
-    elements.formupTime.on('input change', handlers.updateFormupTimeDisplay);
+    elements.formupTime.on('input change', () => {
+        handlers.updateFormupTimeDisplay();
+        handlers.updateOptimerOverlapWarning();
+    });
 
     elements.formupTimeMode.on('change', handlers.setFormupTimeMode);
 
@@ -626,6 +766,7 @@ $(document).ready(() => {
 
         handlers.updateCheckboxVisibility();
         handlers.updateFormupTimeDisplay();
+        handlers.updateOptimerOverlapWarning();
     });
 
     elements.formupTimeNow.on('change', () => {
@@ -636,7 +777,12 @@ $(document).ready(() => {
 
         handlers.updateCheckboxVisibility();
         handlers.updateFormupTimeDisplay();
+        handlers.updateOptimerOverlapWarning();
     });
+
+    if (fleetpingsSettings.optimerInstalled) {
+        elements.createOptimer.on('change', handlers.updateOptimerOverlapWarning);
+    }
 
     if (fleetpingsSettings.srpModuleAvailableToUser) {
         elements.fleetSrp.on('change', handlers.updateCheckboxVisibility);

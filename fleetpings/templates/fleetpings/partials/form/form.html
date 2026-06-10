@@ -85,6 +85,14 @@
         <!-- optimer -->
         {% if optimer_installed %}
             <div class="fleetpings-create-optimer clearfix" style="display: none;">
+                <div
+                    id="fleetpings-optimer-overlap-warning"
+                    class="d-block small text-danger mb-2"
+                    style="display: none;"
+                    data-before-message="{% translate 'Another op starts at __start__. That op may not finish in time.' %}"
+                    data-after-message="{% translate 'Another op starts at __start__. Your op may not finish in time.' %}"
+                    data-exact-message="{% translate 'Another op already starts at __start__.' %}"
+                ></div>
                 {% bootstrap_field form.optimer %}
             </div>
         {% endif %}
