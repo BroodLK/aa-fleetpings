@@ -548,6 +548,12 @@ def ajax_create_fleet_ping(request: WSGIRequest) -> HttpResponse:
         if form.is_valid():
             logger.info(msg="Fleet ping information received")
 
+            if form.cleaned_data["use_main"]:
+                main_character = request.user.profile.main_character
+                form.cleaned_data["fleet_commander"] = (
+                    main_character.character_name if main_character else ""
+                )
+
             # Get ping context
             ping_context = get_ping_context_from_form_data(form_data=form.cleaned_data)
 

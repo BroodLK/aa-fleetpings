@@ -25,6 +25,7 @@ $(document).ready(() => {
         csrfToken: $('input[name="csrfmiddlewaretoken"]'),
         fleetComms: $('#id_fleet_comms'),
         fleetCommander: $('#id_fleet_commander'),
+        useMain: $('#id_use_main'),
         fleetName: $('#id_fleet_name'),
         fleetDuration: $('#id_fleet_duration'),
         formupTime: $('#id_formup_time'),
@@ -496,6 +497,27 @@ $(document).ready(() => {
         },
 
         /**
+         * Synchronize the FC field with the current user's main character.
+         *
+         * @returns {void}
+         */
+        syncFleetCommanderWithMain: () => {
+            if (!elements.useMain.length) {
+                return;
+            }
+
+            const useMain = elements.useMain.is(':checked');
+            const mainCharacterName = fleetpingsSettings.mainCharacterName || '';
+            const canUseMain = useMain && Boolean(mainCharacterName);
+
+            if (canUseMain) {
+                elements.fleetCommander.val(mainCharacterName);
+            }
+
+            elements.fleetCommander.prop('readonly', canUseMain);
+        },
+
+        /**
          * Update the visibility of checkboxes based on the current state of other checkboxes.
          *
          * @returns {void}
@@ -613,6 +635,13 @@ $(document).ready(() => {
             if (templateFields.pre_ping !== null && templateFields.pre_ping !== undefined) {
                 setCheckboxValue(elements.prePing, templateFields.pre_ping);
                 elements.prePing.trigger('change');
+            }
+
+            if (templateFields.use_main !== null && templateFields.use_main !== undefined) {
+                setCheckboxValue(elements.useMain, templateFields.use_main);
+                elements.useMain.trigger('change');
+            } else {
+                handlers.syncFleetCommanderWithMain();
             }
 
             if (templateFields.formup_now !== null && templateFields.formup_now !== undefined) {
@@ -948,6 +977,8 @@ $(document).ready(() => {
         handlers.updateOptimerOverlapWarning();
     });
 
+    elements.useMain.on('change', handlers.syncFleetCommanderWithMain);
+
     elements.formupTimeNow.on('change', () => {
         const isChecked = elements.formupTimeNow.is(':checked');
 
@@ -998,6 +1029,7 @@ $(document).ready(() => {
     /* Initialize */
     state.formupTimeMode = elements.formupTimeMode.filter(':checked').val() || 'eve';
     handlers.updateCheckboxVisibility();
+    handlers.syncFleetCommanderWithMain();
     handlers.setFormupTimeMode();
     dataLoader.initialize()
         .then(() => console.log('Fleetpings form initialized'))

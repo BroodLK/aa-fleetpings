@@ -12,6 +12,11 @@ from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
 # AA Fleet Pings
+from fleetpings.app_settings import (
+    can_add_srp_links,
+    optimer_installed,
+    srp_module_installed,
+)
 from fleetpings.form import (
     FleetPingTemplateAdminForm,
     FleetTypeAdminForm,
@@ -362,6 +367,36 @@ class FleetPingTemplateAdmin(admin.ModelAdmin):
             return ", ".join(names)
 
         return None
+
+    def get_form(self, request, obj=None, change=False, **kwargs):
+        """
+        Inject the current request into the admin form so dynamic choices can
+        mirror the runtime fleet ping form.
+        """
+
+        base_form = super().get_form(request, obj=obj, change=change, **kwargs)
+
+        class RequestAwareFleetPingTemplateAdminForm(base_form):
+            def __init__(self, *args, **form_kwargs):
+                form_kwargs["request"] = request
+                super().__init__(*args, **form_kwargs)
+
+        RequestAwareFleetPingTemplateAdminForm.base_fields = (
+            RequestAwareFleetPingTemplateAdminForm.base_fields.copy()
+        )
+
+        if not optimer_installed():
+            RequestAwareFleetPingTemplateAdminForm.base_fields.pop("optimer", None)
+
+        srp_link_available = srp_module_installed() and any(
+            can_add_srp_links(request=request, module_name=module_name)
+            for module_name in ["aasrp", "allianceauth.srp"]
+        )
+
+        if not srp_link_available:
+            RequestAwareFleetPingTemplateAdminForm.base_fields.pop("srp_link", None)
+
+        return RequestAwareFleetPingTemplateAdminForm
 
 
 @admin.register(Setting)

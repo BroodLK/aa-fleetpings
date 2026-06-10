@@ -3,11 +3,14 @@ Tests for the admin module.
 """
 
 # Standard Library
+from types import ModuleType
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 # Django
+from django.contrib import admin
 from django.contrib.auth.models import Group
+from django.test import RequestFactory
 
 # AA Fleet Pings
 from fleetpings.admin import (
@@ -31,6 +34,7 @@ from fleetpings.models import (
     Webhook,
 )
 from fleetpings.tests import BaseTestCase
+from fleetpings.tests.utils import create_fake_user, random_id
 
 
 class TestHelperCustomFilter(BaseTestCase):
@@ -546,6 +550,287 @@ class TestClassFleetPingTemplateAdmin(BaseTestCase):
         result = FleetPingTemplateAdmin._restricted_to_group(template)
 
         self.assertIsNone(result)
+
+
+class FakeDoctrineQuerySet(list):
+    """
+    Minimal queryset-like wrapper used for fittings doctrine tests.
+    """
+
+    def order_by(self, *args, **kwargs):
+        return self
+
+
+class TestClassFleetPingTemplateAdminForm(BaseTestCase):
+    """
+    Test the FleetPingTemplate admin form.
+    """
+
+    def setUp(self):
+        super().setUp()
+
+        self.admin_instance = FleetPingTemplateAdmin(
+            model=FleetPingTemplate, admin_site=admin.site
+        )
+        self.request_factory = RequestFactory()
+        self.user = create_fake_user(
+            character_id=random_id(),
+            character_name="Diana Prince",
+            permissions=["fleetpings.basic_access"],
+        )
+
+    def _get_request(self):
+        request = self.request_factory.get("/admin/fleetpings/fleetpingtemplate/add/")
+        request.user = self.user
+
+        return request
+
+    def _get_form(self, request=None, data=None):
+        if request is None:
+            request = self._get_request()
+
+        form_class = self.admin_instance.get_form(request=request)
+
+        return form_class(data=data)
+
+    def test_filters_dynamic_choices_like_runtime_form(self):
+        """
+        Test that admin choices respect enabled state and group restrictions.
+        """
+
+        allowed_group = Group.objects.create(name="Allowed")
+        blocked_group = Group.objects.create(name="Blocked")
+        self.user.groups.add(allowed_group)
+
+        setting = Setting.get_solo()
+        setting.use_default_ping_targets = False
+        setting.use_default_fleet_types = False
+        setting.save()
+
+        open_ping_target_group = Group.objects.create(name="Open Ping")
+        allowed_ping_target_group = Group.objects.create(name="Allowed Ping")
+        blocked_ping_target_group = Group.objects.create(name="Blocked Ping")
+
+        with patch(
+            "fleetpings.models._get_discord_group_info",
+            side_effect=[{"id": "1001"}, {"id": "1002"}, {"id": "1003"}],
+        ):
+            DiscordPingTarget.objects.create(name=open_ping_target_group)
+            allowed_ping_target = DiscordPingTarget.objects.create(
+                name=allowed_ping_target_group
+            )
+            blocked_ping_target = DiscordPingTarget.objects.create(
+                name=blocked_ping_target_group
+            )
+
+        allowed_ping_target.restricted_to_group.add(allowed_group)
+        blocked_ping_target.restricted_to_group.add(blocked_group)
+
+        open_webhook = Webhook.objects.create(
+            name="Open Webhook", url="https://example.com/open"
+        )
+        allowed_webhook = Webhook.objects.create(
+            name="Allowed Webhook", url="https://example.com/allowed"
+        )
+        blocked_webhook = Webhook.objects.create(
+            name="Blocked Webhook", url="https://example.com/blocked"
+        )
+        allowed_webhook.restricted_to_group.add(allowed_group)
+        blocked_webhook.restricted_to_group.add(blocked_group)
+
+        open_fleet_type = FleetType.objects.create(name="Open Type")
+        allowed_fleet_type = FleetType.objects.create(name="Allowed Type")
+        blocked_fleet_type = FleetType.objects.create(name="Blocked Type")
+        allowed_fleet_type.restricted_to_group.add(allowed_group)
+        blocked_fleet_type.restricted_to_group.add(blocked_group)
+
+        open_formup_location = FormupLocation.objects.create(name="Open Keepstar")
+        FormupLocation.objects.create(name="Disabled Keepstar", is_enabled=False)
+
+        open_fleet_comm = FleetComm.objects.create(name="Mumble", channel="Alpha")
+        FleetComm.objects.create(name="Discord", channel="Bravo", is_enabled=False)
+
+        open_doctrine = FleetDoctrine.objects.create(
+            name="Open Doctrine", link="https://example.com/open-doctrine"
+        )
+        allowed_doctrine = FleetDoctrine.objects.create(
+            name="Allowed Doctrine", link="https://example.com/allowed-doctrine"
+        )
+        blocked_doctrine = FleetDoctrine.objects.create(
+            name="Blocked Doctrine", link="https://example.com/blocked-doctrine"
+        )
+        allowed_doctrine.restricted_to_group.add(allowed_group)
+        blocked_doctrine.restricted_to_group.add(blocked_group)
+
+        with patch(
+            "fleetpings.form.use_fittings_module_for_doctrines", return_value=False
+        ):
+            form = self._get_form(request=self._get_request())
+
+        ping_target_choices = dict(form.fields["ping_target"].choices)
+        ping_channel_choices = dict(form.fields["ping_channel"].choices)
+        fleet_type_choices = dict(form.fields["fleet_type"].choices)
+        formup_location_choices = dict(form.fields["formup_location"].choices)
+        fleet_comm_choices = dict(form.fields["fleet_comms"].choices)
+        fleet_doctrine_choices = dict(form.fields["fleet_doctrine"].choices)
+
+        self.assertIn("1001", ping_target_choices)
+        self.assertIn("1002", ping_target_choices)
+        self.assertNotIn("1003", ping_target_choices)
+
+        self.assertIn(str(open_webhook.pk), ping_channel_choices)
+        self.assertIn(str(allowed_webhook.pk), ping_channel_choices)
+        self.assertNotIn(str(blocked_webhook.pk), ping_channel_choices)
+
+        self.assertIn(open_fleet_type.name, fleet_type_choices)
+        self.assertIn(allowed_fleet_type.name, fleet_type_choices)
+        self.assertNotIn(blocked_fleet_type.name, fleet_type_choices)
+
+        self.assertIn(open_formup_location.name, formup_location_choices)
+        self.assertNotIn("Disabled Keepstar", formup_location_choices)
+
+        self.assertIn(str(open_fleet_comm), fleet_comm_choices)
+        self.assertNotIn("Discord » Bravo", fleet_comm_choices)
+
+        self.assertIn(open_doctrine.name, fleet_doctrine_choices)
+        self.assertIn(allowed_doctrine.name, fleet_doctrine_choices)
+        self.assertNotIn(blocked_doctrine.name, fleet_doctrine_choices)
+
+    def test_includes_default_choices_only_when_enabled(self):
+        """
+        Test that default ping targets and fleet types follow settings.
+        """
+
+        setting = Setting.get_solo()
+        setting.use_default_ping_targets = True
+        setting.use_default_fleet_types = True
+        setting.save()
+
+        with patch(
+            "fleetpings.form.use_fittings_module_for_doctrines", return_value=False
+        ):
+            form = self._get_form()
+
+        ping_target_choices = dict(form.fields["ping_target"].choices)
+        fleet_type_choices = dict(form.fields["fleet_type"].choices)
+
+        self.assertIn("@here", ping_target_choices)
+        self.assertIn("@everyone", ping_target_choices)
+        self.assertIn("Roaming", fleet_type_choices)
+        self.assertIn("CTA", fleet_type_choices)
+
+        setting.use_default_ping_targets = False
+        setting.use_default_fleet_types = False
+        setting.save()
+
+        with patch(
+            "fleetpings.form.use_fittings_module_for_doctrines", return_value=False
+        ):
+            form = self._get_form()
+
+        ping_target_choices = dict(form.fields["ping_target"].choices)
+        fleet_type_choices = dict(form.fields["fleet_type"].choices)
+
+        self.assertNotIn("@here", ping_target_choices)
+        self.assertNotIn("@everyone", ping_target_choices)
+        self.assertNotIn("Roaming", fleet_type_choices)
+        self.assertNotIn("CTA", fleet_type_choices)
+
+    def test_hides_or_shows_optional_fields_based_on_installed_modules(self):
+        """
+        Test that SRP link and Optimer fields follow module availability.
+        """
+
+        with (
+            patch("fleetpings.form.use_fittings_module_for_doctrines", return_value=False),
+            patch("fleetpings.form.optimer_installed", return_value=False),
+            patch("fleetpings.form.srp_module_installed", return_value=False),
+            patch("fleetpings.admin.optimer_installed", return_value=False),
+            patch("fleetpings.admin.srp_module_installed", return_value=False),
+        ):
+            request = self._get_request()
+            form_class = self.admin_instance.get_form(request=request)
+            form = form_class()
+
+        self.assertNotIn("optimer", form.fields)
+        self.assertNotIn("srp_link", form.fields)
+        self.assertNotIn("optimer", form_class.base_fields)
+        self.assertNotIn("srp_link", form_class.base_fields)
+
+        with (
+            patch("fleetpings.form.use_fittings_module_for_doctrines", return_value=False),
+            patch("fleetpings.form.optimer_installed", return_value=True),
+            patch("fleetpings.form.srp_module_installed", return_value=True),
+            patch("fleetpings.form.can_add_srp_links", return_value=True),
+            patch("fleetpings.admin.optimer_installed", return_value=True),
+            patch("fleetpings.admin.srp_module_installed", return_value=True),
+            patch("fleetpings.admin.can_add_srp_links", return_value=True),
+        ):
+            request = self._get_request()
+            form_class = self.admin_instance.get_form(request=request)
+            form = form_class()
+
+        self.assertIn("optimer", form.fields)
+        self.assertIn("srp_link", form.fields)
+        self.assertIn("optimer", form_class.base_fields)
+        self.assertIn("srp_link", form_class.base_fields)
+
+    def test_sets_local_doctrine_link_from_selected_choice(self):
+        """
+        Test that selecting a local doctrine stores its configured link.
+        """
+
+        FleetDoctrine.objects.create(
+            name="Shield HAC", link="https://example.com/shield-hac"
+        )
+
+        with patch(
+            "fleetpings.form.use_fittings_module_for_doctrines", return_value=False
+        ):
+            form = self._get_form(
+                data={"name": "Shield Template", "fleet_doctrine": "Shield HAC"}
+            )
+
+        self.assertTrue(form.is_valid(), msg=form.errors.as_json())
+        self.assertEqual(
+            form.cleaned_data["fleet_doctrine_url"],
+            "https://example.com/shield-hac",
+        )
+
+    def test_sets_fittings_doctrine_link_from_selected_choice(self):
+        """
+        Test that selecting a fittings doctrine stores the generated doctrine link.
+        """
+
+        fittings_views = ModuleType("fittings.views")
+        fittings_views._get_docs_qs = Mock(
+            return_value=FakeDoctrineQuerySet([SimpleNamespace(pk=42, name="Muninn")])
+        )
+
+        with (
+            patch.dict(
+                "sys.modules",
+                {
+                    "fittings": ModuleType("fittings"),
+                    "fittings.views": fittings_views,
+                },
+            ),
+            patch("fleetpings.form.use_fittings_module_for_doctrines", return_value=True),
+            patch(
+                "fleetpings.form.reverse_absolute",
+                return_value="https://example.com/fittings/42/",
+            ),
+        ):
+            form = self._get_form(
+                data={"name": "Muninn Template", "fleet_doctrine": "Muninn"}
+            )
+
+        self.assertTrue(form.is_valid(), msg=form.errors.as_json())
+        self.assertEqual(
+            form.cleaned_data["fleet_doctrine_url"],
+            "https://example.com/fittings/42/",
+        )
+        fittings_views._get_docs_qs.assert_called_once()
 
 
 class TestClassSettingAdmin(BaseTestCase):

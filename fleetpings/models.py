@@ -619,6 +619,13 @@ class FleetPingTemplate(models.Model):
         verbose_name=_("FC name"),
     )
 
+    use_main = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text=_("Prefill the Use main checkbox."),
+        verbose_name=_("Use main"),
+    )
+
     fleet_name = models.CharField(
         max_length=255,
         blank=True,
@@ -765,6 +772,7 @@ class FleetPingTemplate(models.Model):
             "ping_channel": self.ping_channel or None,
             "fleet_type": self.fleet_type or None,
             "fleet_commander": self.fleet_commander or None,
+            "use_main": self.use_main,
             "fleet_name": self.fleet_name or None,
             "formup_location": self.formup_location or None,
             "formup_time": self.formup_time or None,

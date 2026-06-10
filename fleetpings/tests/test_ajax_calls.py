@@ -298,6 +298,7 @@ class TestAjaxCalls(BaseTestCase):
             formup_now=False,
             formup_time="2026-06-10 19:00",
             formup_time_mode=FleetPingTemplate.FormupTimeMode.EVE,
+            use_main=True,
             fleet_doctrine="Tempest Fleet",
             optimer=False,
         )
@@ -321,6 +322,7 @@ class TestAjaxCalls(BaseTestCase):
         self.assertEqual(data["templates"][0]["fields"]["pre_ping"], True)
         self.assertEqual(data["templates"][0]["fields"]["formup_now"], False)
         self.assertEqual(data["templates"][0]["fields"]["formup_time_mode"], "eve")
+        self.assertEqual(data["templates"][0]["fields"]["use_main"], True)
         self.assertEqual(data["templates"][0]["fields"]["fleet_doctrine"], "Tempest Fleet")
         self.assertEqual(data["templates"][0]["fields"]["optimer"], False)
 
@@ -418,6 +420,49 @@ class TestAjaxCalls(BaseTestCase):
         )
         self.assertContains(response=response, text="**SRP:** Yes")
         self.assertContains(response=response, text="Borg to slaughter!")
+
+    def test_ajax_create_fleet_ping_with_use_main(self):
+        """
+        Test ajax call to create fleet pings using the logged in user's main.
+
+        :return:
+        :rtype:
+        """
+
+        # given
+        self.client.force_login(user=self.user_1002)
+        form_data = {
+            "ping_target": "@here",
+            "pre_ping": 0,
+            "ping_channel": "",
+            "fleet_type": "CTA",
+            "fleet_commander": "Jean Luc Picard",
+            "use_main": 1,
+            "fleet_name": "Starfleet",
+            "formup_location": "Utopia Planitia",
+            "formup_time": "",
+            "formup_timestamp": "",
+            "formup_now": 1,
+            "fleet_comms": "Mumble",
+            "fleet_doctrine": "Federation Ships",
+            "fleet_doctrine_url": "",
+            "webhook_embed_color": "",
+            "srp": 1,
+            "srp_link": 1,
+            "additional_information": "Borg to slaughter!",
+        }
+
+        # when
+        response = self.client.post(
+            path=reverse("fleetpings:ajax_create_fleet_ping"),
+            data=json.dumps(form_data),
+            content_type="application/json",
+        )
+
+        # then
+        self.assertEqual(first=response.status_code, second=HTTPStatus.OK)
+        self.assertContains(response=response, text="**FC:** Bruce Wayne")
+        self.assertNotContains(response=response, text="**FC:** Jean Luc Picard")
 
     @modify_settings(
         INSTALLED_APPS={
