@@ -12,11 +12,16 @@ from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 
 # AA Fleet Pings
-from fleetpings.form import FleetTypeAdminForm, SettingAdminForm
+from fleetpings.form import (
+    FleetPingTemplateAdminForm,
+    FleetTypeAdminForm,
+    SettingAdminForm,
+)
 from fleetpings.models import (
     DiscordPingTarget,
     FleetComm,
     FleetDoctrine,
+    FleetPingTemplate,
     FleetType,
     FormupLocation,
     Setting,
@@ -321,6 +326,36 @@ class WebhookAdmin(admin.ModelAdmin):
         description=_("Group restrictions"), ordering="restricted_to_group__name"
     )
     def _restricted_to_group(cls, obj: Webhook) -> str | None:
+        names = [x.name for x in obj.restricted_to_group.all().order_by("name")]
+
+        if names:
+            return ", ".join(names)
+
+        return None
+
+
+@admin.register(FleetPingTemplate)
+class FleetPingTemplateAdmin(admin.ModelAdmin):
+    """
+    FleetPingTemplateAdmin
+    """
+
+    form = FleetPingTemplateAdminForm
+
+    list_display = ("name", "_restricted_to_group", "notes", "is_enabled")
+    filter_horizontal = ("restricted_to_group",)
+    ordering = ("name",)
+
+    list_filter = (
+        ("is_enabled", _custom_filter(title="active")),
+        ("restricted_to_group", _custom_filter(title="restriction")),
+    )
+
+    @classmethod
+    @admin.display(
+        description=_("Group restrictions"), ordering="restricted_to_group__name"
+    )
+    def _restricted_to_group(cls, obj: FleetPingTemplate) -> str | None:
         names = [x.name for x in obj.restricted_to_group.all().order_by("name")]
 
         if names:

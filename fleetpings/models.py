@@ -542,6 +542,266 @@ class Webhook(models.Model):
         super().clean()
 
 
+class FleetPingTemplate(models.Model):
+    """
+    Fleet Ping Templates
+    """
+
+    class FormupTimeMode(models.TextChoices):
+        """
+        Choices for FleetPingTemplate.FormupTimeMode
+        """
+
+        EVE = "eve", _("EVE time")
+        LOCAL = "local", _("Local time")
+
+    name = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text=_("Short name to identify this template"),
+        verbose_name=_("Name"),
+    )
+
+    restricted_to_group = models.ManyToManyField(
+        to=Group,
+        blank=True,
+        related_name="fleetpingtemplate_require_groups",
+        help_text=_("Restrict this template to the following groups…"),
+        verbose_name=_("Group restrictions"),
+    )
+
+    notes = models.TextField(
+        null=True,
+        blank=True,
+        help_text=_("You can add notes about this template here if you want"),
+        verbose_name=_("Notes"),
+    )
+
+    is_enabled = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text=_("Whether this template is enabled or not"),
+        verbose_name=_("Is enabled"),
+    )
+
+    ping_target = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Prefill the ping target."),
+        verbose_name=_("Ping target"),
+    )
+
+    pre_ping = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text=_("Prefill the pre-ping checkbox."),
+        verbose_name=_("Pre-Ping"),
+    )
+
+    ping_channel = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Prefill the ping channel."),
+        verbose_name=_("Ping to"),
+    )
+
+    fleet_type = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Prefill the fleet type."),
+        verbose_name=_("Fleet type"),
+    )
+
+    fleet_commander = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Prefill the FC name."),
+        verbose_name=_("FC name"),
+    )
+
+    fleet_name = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Prefill the fleet name."),
+        verbose_name=_("Fleet name"),
+    )
+
+    formup_location = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Prefill the formup location."),
+        verbose_name=_("Formup location"),
+    )
+
+    formup_time = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Prefill the formup time."),
+        verbose_name=_("Formup time"),
+    )
+
+    formup_time_mode = models.CharField(
+        max_length=5,
+        blank=True,
+        choices=FormupTimeMode.choices,
+        help_text=_("Prefill the formup time mode."),
+        verbose_name=_("Time zone"),
+    )
+
+    formup_now = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text=_("Prefill the Formup NOW checkbox."),
+        verbose_name=_("Formup NOW"),
+    )
+
+    fleet_duration = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Prefill the fleet duration."),
+        verbose_name=_("Duration"),
+    )
+
+    fleet_comms = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Prefill the fleet comms."),
+        verbose_name=_("Fleet comms"),
+    )
+
+    fleet_doctrine = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Prefill the doctrine."),
+        verbose_name=_("Doctrine"),
+    )
+
+    fleet_doctrine_url = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Prefill the doctrine link."),
+        verbose_name=_("Doctrine link"),
+    )
+
+    srp = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text=_("Prefill the SRP checkbox."),
+        verbose_name=_("SRP"),
+    )
+
+    srp_link = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text=_("Prefill the create SRP link checkbox."),
+        verbose_name=_("Create SRP link"),
+    )
+
+    additional_information = models.TextField(
+        blank=True,
+        help_text=_("Prefill the additional information."),
+        verbose_name=_("Additional information"),
+    )
+
+    optimer = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text=_("Prefill the create Optimer checkbox."),
+        verbose_name=_("Create Optimer"),
+    )
+
+    def clean(self):
+        """
+        Validate template fields
+        """
+
+        if self.fleet_doctrine_url:
+            validate = URLValidator()
+
+            try:
+                validate(self.fleet_doctrine_url)
+            except ValidationError as exception:
+                raise ValidationError(
+                    message=_("Your doctrine URL is not valid.")
+                ) from exception
+
+        if self.formup_time and not self.formup_time_mode:
+            raise ValidationError(
+                message=_(
+                    "Please choose a time zone when you want this template to prefill "
+                    "the formup time."
+                )
+            )
+
+        if (
+            self.pre_ping is not None
+            and self.formup_now is not None
+            and self.pre_ping == self.formup_now
+        ):
+            raise ValidationError(
+                message=_(
+                    "Pre-Ping and Formup NOW must be opposite values when both are "
+                    "set on a template."
+                )
+            )
+
+        super().clean()
+
+    def __str__(self) -> str:
+        """
+        String representation of the object
+        """
+
+        return str(self.name)
+
+    def get_template_fields(self) -> dict:
+        """
+        Return the template values keyed to the frontend form field names.
+        """
+
+        return {
+            "ping_target": self.ping_target or None,
+            "pre_ping": self.pre_ping,
+            "ping_channel": self.ping_channel or None,
+            "fleet_type": self.fleet_type or None,
+            "fleet_commander": self.fleet_commander or None,
+            "fleet_name": self.fleet_name or None,
+            "formup_location": self.formup_location or None,
+            "formup_time": self.formup_time or None,
+            "formup_time_mode": self.formup_time_mode or None,
+            "formup_now": self.formup_now,
+            "fleet_duration": self.fleet_duration or None,
+            "fleet_comms": self.fleet_comms or None,
+            "fleet_doctrine": self.fleet_doctrine or None,
+            "fleet_doctrine_url": self.fleet_doctrine_url or None,
+            "srp": self.srp,
+            "srp_link": self.srp_link,
+            "additional_information": self.additional_information or None,
+            "optimer": self.optimer,
+        }
+
+    def as_json(self) -> dict:
+        """
+        Return a JSON-ready representation of the template.
+        """
+
+        return {
+            "id": self.pk,
+            "name": self.name,
+            "notes": self.notes or "",
+            "fields": self.get_template_fields(),
+        }
+
+    class Meta:  # pylint: disable=too-few-public-methods
+        """
+        FleetPingTemplate :: Meta
+        """
+
+        verbose_name = _("Fleet ping template")
+        verbose_name_plural = _("Fleet ping templates")
+        default_permissions = ()
+
+
 class Setting(SingletonModel):
     """
     Default forum settings

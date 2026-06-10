@@ -1,0 +1,19 @@
+{% load i18n %}
+
+<div class="card card-default">
+    <div class="card-header aa-fleetpings-ping-header">
+        <span class="card-title">{% translate "Templates" %}</span>
+    </div>
+
+    <div class="card-body">
+        <div
+            id="fleetpings-template-list"
+            class="d-grid gap-2"
+            data-loading-message="{% translate 'Loading templates…' %}"
+            data-empty-message="{% translate 'No templates available.' %}"
+            data-error-message="{% translate 'Unable to load templates.' %}"
+        >
+            <div class="small text-muted">{% translate "Loading templates…" %}</div>
+        </div>
+    </div>
+</div>

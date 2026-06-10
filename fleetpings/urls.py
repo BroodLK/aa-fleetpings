@@ -55,6 +55,11 @@ ajax_urls = path(
                 view=views.ajax_get_optimer_overlap,
                 name="ajax_get_optimer_overlap",
             ),
+            path(
+                route="get-templates-for-user/",
+                view=views.ajax_get_templates,
+                name="ajax_get_templates",
+            ),
         ]
     ),
 )

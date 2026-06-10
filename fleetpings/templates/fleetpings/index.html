@@ -5,7 +5,7 @@
 
 {% block aa_fleetpings_body %}
     <div class="row">
-        <div class="col-md-6 mb-3 aa-fleetpings-pingform">
+        <div class="col-lg-7 mb-3 aa-fleetpings-pingform">
             <div class="card card-default">
                 <div class="card-header aa-fleetpings-ping-header">
                     <span class="card-title">{% translate "Fleet information" %}</span>
@@ -17,14 +17,20 @@
             </div>
         </div>
 
-        <div class="col-md-6 aa-fleetpings-pingtext">
-            <div class="card card-default position-sticky" style="top: 1rem;">
-                <div class="card-header aa-fleetpings-ping-header">
-                    <span class="card-title">{% translate "Formatted ping text" %}</span>
+        <div class="col-lg-5 aa-fleetpings-sidebar">
+            <div class="position-sticky" style="top: 1rem;">
+                <div class="mb-3">
+                    {% include "fleetpings/partials/templates/templates.html" %}
                 </div>
 
-                <div class="card-body">
-                    {% include "fleetpings/partials/ping/ping.html" %}
+                <div class="card card-default aa-fleetpings-pingtext">
+                    <div class="card-header aa-fleetpings-ping-header">
+                        <span class="card-title">{% translate "Formatted ping text" %}</span>
+                    </div>
+
+                    <div class="card-body">
+                        {% include "fleetpings/partials/ping/ping.html" %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -47,7 +53,8 @@
                     formupLocations: '{% url "fleetpings:ajax_get_formup_locations" %}',
                     fleetComms: '{% url "fleetpings:ajax_get_fleet_comms" %}',
                     fleetDoctrines: '{% url "fleetpings:ajax_get_fleet_doctrines" %}',
-                    optimerOverlap: '{% url "fleetpings:ajax_get_optimer_overlap" %}'
+                    optimerOverlap: '{% url "fleetpings:ajax_get_optimer_overlap" %}',
+                    templates: '{% url "fleetpings:ajax_get_templates" %}'
                 },
                 translation: {
                     optimer: {

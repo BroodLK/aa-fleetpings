@@ -12,6 +12,7 @@ from django.test import modify_settings
 from django.urls import reverse
 
 # AA Fleet Pings
+from fleetpings.models import FleetPingTemplate
 from fleetpings.tests import BaseTestCase
 from fleetpings.tests.utils import create_fake_user, random_id
 
@@ -270,6 +271,58 @@ class TestAjaxCalls(BaseTestCase):
 
         # then
         self.assertEqual(first=res.status_code, second=HTTPStatus.OK)
+
+    def test_ajax_get_templates_no_access(self):
+        """
+        Test ajax call to get templates is not available without access
+        """
+
+        self.client.force_login(user=self.user_1001)
+
+        res = self.client.get(path=reverse(viewname="fleetpings:ajax_get_templates"))
+
+        self.assertEqual(first=res.status_code, second=HTTPStatus.FOUND)
+
+    def test_ajax_get_templates_general(self):
+        """
+        Test ajax call to get templates available for the current user
+        """
+
+        self.client.force_login(user=self.user_1002)
+        self.user_1002.groups.add(self.group)
+
+        visible_template = FleetPingTemplate.objects.create(
+            name="Open Template",
+            ping_target="@here",
+            pre_ping=True,
+            formup_now=False,
+            formup_time="2026-06-10 19:00",
+            formup_time_mode=FleetPingTemplate.FormupTimeMode.EVE,
+            fleet_doctrine="Tempest Fleet",
+            optimer=False,
+        )
+        visible_template.restricted_to_group.add(self.group)
+
+        FleetPingTemplate.objects.create(name="Disabled Template", is_enabled=False)
+
+        hidden_group = Group.objects.create(name="Hidden Group")
+        hidden_template = FleetPingTemplate.objects.create(name="Hidden Template")
+        hidden_template.restricted_to_group.add(hidden_group)
+
+        res = self.client.get(path=reverse(viewname="fleetpings:ajax_get_templates"))
+
+        self.assertEqual(first=res.status_code, second=HTTPStatus.OK)
+
+        data = res.json()
+        template_names = [template["name"] for template in data["templates"]]
+
+        self.assertEqual(template_names, ["Open Template"])
+        self.assertEqual(data["templates"][0]["fields"]["ping_target"], "@here")
+        self.assertEqual(data["templates"][0]["fields"]["pre_ping"], True)
+        self.assertEqual(data["templates"][0]["fields"]["formup_now"], False)
+        self.assertEqual(data["templates"][0]["fields"]["formup_time_mode"], "eve")
+        self.assertEqual(data["templates"][0]["fields"]["fleet_doctrine"], "Tempest Fleet")
+        self.assertEqual(data["templates"][0]["fields"]["optimer"], False)
 
     def test_ajax_create_fleet_ping_no_access(self):
         """

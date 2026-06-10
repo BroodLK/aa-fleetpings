@@ -7,6 +7,8 @@ $(document).ready(() => {
 
     /* DOM Elements Cache */
     const elements = {
+        form: $('#aa-fleetping-form'),
+
         // Checkboxes
         prePing: $('#id_pre_ping'),
         formupTimeNow: $('#id_formup_now'),
@@ -24,6 +26,7 @@ $(document).ready(() => {
         fleetComms: $('#id_fleet_comms'),
         fleetCommander: $('#id_fleet_commander'),
         fleetName: $('#id_fleet_name'),
+        fleetDuration: $('#id_fleet_duration'),
         formupTime: $('#id_formup_time'),
         formupTimeMode: $('input[name="fleetpings_formup_time_mode"]'),
         formupTimeModeContainer: $('.fleetpings-formup-time-mode'),
@@ -33,7 +36,9 @@ $(document).ready(() => {
         formupLocation: $('#id_formup_location'),
         fleetDoctrine: $('#id_fleet_doctrine'),
         fleetDoctrineUrl: $('#id_fleet_doctrine_url'),
-        webhookEmbedColor: $('#id_webhook_embed_color')
+        webhookEmbedColor: $('#id_webhook_embed_color'),
+        additionalInformation: $('#id_additional_information'),
+        templateList: $('#fleetpings-template-list')
     };
 
     const state = {
@@ -359,6 +364,31 @@ $(document).ready(() => {
         },
 
         /**
+         * Load templates from the server and render them.
+         *
+         * @returns {Promise<void>} A promise that resolves when the template list is ready.
+         */
+        loadTemplates: async () => {
+            if (!elements.templateList.length) {
+                return;
+            }
+
+            try {
+                const data = await fetchGet({
+                    url: fleetpingsSettings.url.templates,
+                    responseIsJson: true
+                });
+
+                handlers.renderTemplates(data.templates || []);
+            } catch (error) {
+                console.error('Error loading templates:', error);
+                elements.templateList.html(
+                    `<div class="small text-danger">${elements.templateList.data('error-message')}</div>`
+                );
+            }
+        },
+
+        /**
          * Initialize the data loader by loading all necessary data for the form.
          *
          * @returns {Promise<void>} A promise that resolves when all data is loaded.
@@ -377,6 +407,8 @@ $(document).ready(() => {
                 dataLoader.loadAutocompleteData(fleetpingsSettings.url.fleetComms, elements.fleetComms, 'id_fleet_comms'),
                 dataLoader.loadAutocompleteData(fleetpingsSettings.url.fleetDoctrines, elements.fleetDoctrine, 'id_fleet_doctrine')
             ]);
+
+            await dataLoader.loadTemplates();
         }
     };
 
@@ -407,6 +439,60 @@ $(document).ready(() => {
             elements.optimerOverlapWarning
                 .text('')
                 .hide();
+        },
+
+        /**
+         * Render template buttons.
+         *
+         * @param {Array} templates The templates returned by the backend.
+         * @returns {void}
+         */
+        renderTemplates: (templates) => {
+            if (!elements.templateList.length) {
+                return;
+            }
+
+            elements.templateList.empty();
+
+            if (!templates.length) {
+                elements.templateList.append(
+                    $('<div>', {
+                        class: 'small text-muted',
+                        text: elements.templateList.data('empty-message')
+                    })
+                );
+
+                return;
+            }
+
+            templates.forEach((template) => {
+                const button = $('<button>', {
+                    type: 'button',
+                    class: 'btn btn-outline-secondary text-start'
+                });
+
+                button.append(
+                    $('<span>', {
+                        class: 'd-block fw-semibold',
+                        text: template.name
+                    })
+                );
+
+                if (template.notes) {
+                    button.append(
+                        $('<span>', {
+                            class: 'd-block small text-muted',
+                            text: template.notes
+                        })
+                    );
+                }
+
+                button.on('click', async () => {
+                    await handlers.applyTemplate(template);
+                });
+
+                elements.templateList.append(button);
+            });
         },
 
         /**
@@ -462,6 +548,99 @@ $(document).ready(() => {
             const selectedLink = $(`#fleet-doctrine-list [value="${utils.escapeInput(fleetDoctrine)}"]`).data('doctrine-url');
 
             elements.fleetDoctrineUrl.val(selectedLink || null);
+        },
+
+        /**
+         * Apply a template to the form.
+         *
+         * @param {Object} template The template returned by the backend.
+         * @returns {Promise<void>} A promise that resolves when the template has been applied.
+         */
+        applyTemplate: async (template) => {
+            const templateFields = template.fields || {};
+            const setSelectValue = (element, value) => {
+                if (!element.length || value === null || value === undefined) {
+                    return;
+                }
+
+                const matchingOption = element.find('option').filter((index, option) => {
+                    return $(option).val() === String(value);
+                });
+
+                if (!matchingOption.length) {
+                    return;
+                }
+
+                element.val(String(value));
+            };
+            const setInputValue = (element, value) => {
+                if (!element.length || value === null || value === undefined) {
+                    return;
+                }
+
+                element.val(String(value));
+            };
+            const setCheckboxValue = (element, value) => {
+                if (!element.length || value === null || value === undefined) {
+                    return;
+                }
+
+                element.prop('checked', Boolean(value));
+            };
+
+            setSelectValue(elements.pingTarget, templateFields.ping_target);
+            elements.pingTarget.trigger('change');
+
+            setSelectValue(elements.pingChannel, templateFields.ping_channel);
+
+            setSelectValue(elements.fleetType, templateFields.fleet_type);
+            elements.fleetType.trigger('change');
+
+            setInputValue(elements.fleetCommander, templateFields.fleet_commander);
+            setInputValue(elements.fleetName, templateFields.fleet_name);
+            setInputValue(elements.formupLocation, templateFields.formup_location);
+            setInputValue(elements.fleetDuration, templateFields.fleet_duration);
+            setInputValue(elements.fleetComms, templateFields.fleet_comms);
+            setInputValue(elements.additionalInformation, templateFields.additional_information);
+
+            if (templateFields.formup_time_mode !== null && templateFields.formup_time_mode !== undefined) {
+                elements.formupTimeMode
+                    .filter(`[value="${templateFields.formup_time_mode}"]`)
+                    .prop('checked', true);
+                handlers.setFormupTimeMode();
+            }
+
+            if (templateFields.pre_ping !== null && templateFields.pre_ping !== undefined) {
+                setCheckboxValue(elements.prePing, templateFields.pre_ping);
+                elements.prePing.trigger('change');
+            }
+
+            if (templateFields.formup_now !== null && templateFields.formup_now !== undefined) {
+                setCheckboxValue(elements.formupTimeNow, templateFields.formup_now);
+                elements.formupTimeNow.trigger('change');
+            }
+
+            setInputValue(elements.formupTime, templateFields.formup_time);
+
+            setInputValue(elements.fleetDoctrine, templateFields.fleet_doctrine);
+
+            if (templateFields.fleet_doctrine_url !== null && templateFields.fleet_doctrine_url !== undefined) {
+                setInputValue(elements.fleetDoctrineUrl, templateFields.fleet_doctrine_url);
+            } else {
+                handlers.setFleetDoctrineUrl();
+            }
+
+            if (templateFields.srp !== null && templateFields.srp !== undefined) {
+                setCheckboxValue(elements.fleetSrp, templateFields.srp);
+                elements.fleetSrp.trigger('change');
+            }
+
+            setCheckboxValue(elements.createSrpLink, templateFields.srp_link);
+            setCheckboxValue(elements.createOptimer, templateFields.optimer);
+
+            handlers.updateCheckboxVisibility();
+            handlers.updateFormupTimeDisplay();
+            await handlers.updateOptimerOverlapWarning();
         },
 
         /**

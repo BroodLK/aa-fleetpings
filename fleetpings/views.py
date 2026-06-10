@@ -40,6 +40,7 @@ from fleetpings.models import (
     DiscordPingTarget,
     FleetComm,
     FleetDoctrine,
+    FleetPingTemplate,
     FleetType,
     FormupLocation,
     Setting,
@@ -349,6 +350,33 @@ def ajax_get_optimer_overlap(request: WSGIRequest) -> JsonResponse:
             "relation": relation,
         }
     )
+
+
+@login_required
+@permission_required(perm="fleetpings.basic_access")
+def ajax_get_templates(request: WSGIRequest) -> JsonResponse:
+    """
+    Get fleet ping templates for the current user
+
+    :param request:
+    :type request:
+    :return:
+    :rtype:
+    """
+
+    logger.info(msg=f"Getting fleet ping templates for user {request.user}")
+
+    templates = (
+        FleetPingTemplate.objects.filter(
+            Q(restricted_to_group__in=request.user.groups.all())
+            | Q(restricted_to_group__isnull=True),
+            is_enabled=True,
+        )
+        .distinct()
+        .order_by("name")
+    )
+
+    return JsonResponse({"templates": [template.as_json() for template in templates]})
 
 
 @login_required

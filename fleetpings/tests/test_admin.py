@@ -14,6 +14,7 @@ from fleetpings.admin import (
     DiscordPingTargetsAdmin,
     FleetCommAdmin,
     FleetDoctrineAdmin,
+    FleetPingTemplateAdmin,
     FleetTypeAdmin,
     WebhookAdmin,
     _custom_filter,
@@ -23,6 +24,7 @@ from fleetpings.models import (
     DiscordPingTarget,
     FleetComm,
     FleetDoctrine,
+    FleetPingTemplate,
     FleetType,
     FormupLocation,
     Setting,
@@ -512,6 +514,38 @@ class TestClassWebhookAdmin(BaseTestCase):
         webhook = Webhook.objects.create(name="Test Webhook", url="")
 
         self.assertEqual(WebhookAdmin._url(webhook), "")
+
+
+class TestClassFleetPingTemplateAdmin(BaseTestCase):
+    """
+    Test the FleetPingTemplateAdmin class.
+    """
+
+    def test_displays_group_restrictions_as_comma_separated_string(self):
+        """
+        Test that the _restricted_to_group method returns group restrictions as a comma-separated string.
+        """
+
+        group1 = Group.objects.create(name="Group A")
+        group2 = Group.objects.create(name="Group B")
+
+        template = FleetPingTemplate.objects.create(name="Armor Timer")
+        template.restricted_to_group.add(group1, group2)
+
+        result = FleetPingTemplateAdmin._restricted_to_group(template)
+
+        self.assertEqual(result, "Group A, Group B")
+
+    def test_returns_none_when_no_group_restrictions_exist(self):
+        """
+        Test that the _restricted_to_group method returns None when no group restrictions exist.
+        """
+
+        template = FleetPingTemplate.objects.create(name="Armor Timer")
+
+        result = FleetPingTemplateAdmin._restricted_to_group(template)
+
+        self.assertIsNone(result)
 
 
 class TestClassSettingAdmin(BaseTestCase):

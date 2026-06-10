@@ -8,7 +8,13 @@ from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy as _
 
 # AA Fleet Pings
-from fleetpings.models import FleetType, Setting
+from fleetpings.models import (
+    DiscordPingTarget,
+    FleetPingTemplate,
+    FleetType,
+    Setting,
+    Webhook,
+)
 
 
 def _get_discord_markdown_hint_text() -> str:
@@ -64,6 +70,130 @@ class SettingAdminForm(forms.ModelForm):
         model = Setting
         fields = "__all__"
         widgets = {"default_embed_color": forms.TextInput(attrs={"type": "color"})}
+
+
+class FleetPingTemplateAdminForm(forms.ModelForm):
+    """
+    Form definitions for the FleetPingTemplate form in admin
+    """
+
+    ping_target = forms.ChoiceField(required=False, label=_("Ping target"))
+    ping_channel = forms.ChoiceField(required=False, label=_("Ping to"))
+    fleet_type = forms.ChoiceField(required=False, label=_("Fleet type"))
+    formup_time_mode = forms.ChoiceField(required=False, label=_("Time zone"))
+
+    class Meta:  # pylint: disable=too-few-public-methods
+        """
+        Meta
+        """
+
+        model = FleetPingTemplate
+        fields = "__all__"
+        widgets = {
+            "additional_information": forms.Textarea(attrs={"rows": 6}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        """
+        Initialize dynamic choices
+        """
+
+        super().__init__(*args, **kwargs)
+
+        self.fields["ping_target"].choices = self._get_ping_target_choices()
+        self.fields["ping_channel"].choices = self._get_ping_channel_choices()
+        self.fields["fleet_type"].choices = self._get_fleet_type_choices()
+        self.fields["formup_time_mode"].choices = self._get_formup_time_mode_choices()
+
+        self._append_instance_value(
+            field_name="ping_target", field_value=self.instance.ping_target
+        )
+        self._append_instance_value(
+            field_name="ping_channel", field_value=self.instance.ping_channel
+        )
+        self._append_instance_value(
+            field_name="fleet_type", field_value=self.instance.fleet_type
+        )
+        self._append_instance_value(
+            field_name="formup_time_mode", field_value=self.instance.formup_time_mode
+        )
+
+    def _append_instance_value(self, field_name: str, field_value: str):
+        """
+        Keep the current value selectable even if it is no longer in the choices.
+        """
+
+        if not field_value:
+            return
+
+        choices = dict(self.fields[field_name].choices)
+
+        if field_value not in choices:
+            self.fields[field_name].choices += [(field_value, field_value)]
+
+    @staticmethod
+    def _get_ping_target_choices() -> list[tuple[str, str]]:
+        """
+        Get ping target choices for templates
+        """
+
+        choices = [
+            ("", _("Do not prefill")),
+            ("@here", "@here"),
+            ("@everyone", "@everyone"),
+        ]
+
+        ping_targets = DiscordPingTarget.objects.select_related("name").order_by(
+            "name__name"
+        )
+
+        for ping_target in ping_targets:
+            choices.append((ping_target.discord_id, f"@{ping_target.name}"))
+
+        return choices
+
+    @staticmethod
+    def _get_ping_channel_choices() -> list[tuple[str, str]]:
+        """
+        Get ping channel choices for templates
+        """
+
+        choices = [("", _("Do not prefill"))]
+
+        for webhook in Webhook.objects.order_by("name"):
+            choices.append((str(webhook.pk), webhook.name))
+
+        return choices
+
+    @staticmethod
+    def _get_fleet_type_choices() -> list[tuple[str, str]]:
+        """
+        Get fleet type choices for templates
+        """
+
+        choices = [
+            ("", _("Do not prefill")),
+            ("Roaming", _("Roaming Fleet")),
+            ("Home Defense", _("Home Defense")),
+            ("StratOP", _("StratOP")),
+            ("CTA", _("CTA")),
+        ]
+
+        for fleet_type in FleetType.objects.order_by("name"):
+            choices.append((fleet_type.name, fleet_type.name))
+
+        return choices
+
+    @staticmethod
+    def _get_formup_time_mode_choices() -> list[tuple[str, str]]:
+        """
+        Get formup time mode choices for templates
+        """
+
+        choices = [("", _("Do not prefill"))]
+        choices.extend(FleetPingTemplate.FormupTimeMode.choices)
+
+        return choices
 
 
 class FleetPingForm(forms.Form):
