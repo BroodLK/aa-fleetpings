@@ -38,7 +38,7 @@ dynamic = [
     "version",
 ]
 dependencies = [
-    "allianceauth>=5,<6",
+    "allianceauth>=4,<6",
     "dhooks-lite>=0.6.1",
 ]
 optional-dependencies.tests-allianceauth-latest = [
