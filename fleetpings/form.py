@@ -2,10 +2,15 @@
 Form declarations
 """
 
+# Standard Library
+from datetime import datetime
+from datetime import timezone as datetime_timezone
+
 # Django
 from django import forms
 from django.contrib.auth.models import Group
 from django.db.models import Q
+from django.utils import timezone
 from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy as _
 
@@ -16,6 +21,8 @@ from fleetpings.app_settings import (
     srp_module_installed,
     use_fittings_module_for_doctrines,
 )
+from fleetpings.constants import PRESET_REMINDER_INTERVALS
+from fleetpings.helper.reminders import validate_selected_offsets
 from fleetpings.helper.urls import reverse_absolute
 from fleetpings.models import (
     DiscordPingTarget,
@@ -27,6 +34,189 @@ from fleetpings.models import (
     Setting,
     Webhook,
 )
+
+
+def _reminder_interval_choices() -> list[tuple[str, str]]:
+    """
+    Choices for reminder interval checkboxes.
+    """
+
+    return [(str(minutes), label) for minutes, label in PRESET_REMINDER_INTERVALS]
+
+def _initial_interval_selection(offsets: list[int]) -> list[str]:
+    """
+    Convert stored offsets into checkbox values.
+    """
+
+    preset_values = {minutes for minutes, _label in PRESET_REMINDER_INTERVALS}
+    return [str(offset) for offset in offsets or [] if offset in preset_values]
+
+
+def _user_groups(user) -> list[Group]:
+    """
+    Return the current user's groups or an empty queryset-equivalent list.
+    """
+
+    if user and hasattr(user, "groups"):
+        return list(user.groups.all())
+
+    return []
+
+
+def _allowed_webhooks_for_user(user):
+    """
+    Return webhook rows that the given user may use.
+    """
+
+    if user and getattr(user, "is_superuser", False):
+        return Webhook.objects.filter(is_enabled=True)
+
+    groups = _user_groups(user=user)
+
+    return (
+        Webhook.objects.filter(
+            Q(restricted_to_group__in=groups) | Q(restricted_to_group__isnull=True),
+            is_enabled=True,
+        )
+        .distinct()
+        .order_by("name")
+    )
+
+
+def _allowed_ping_targets_for_user(user):
+    """
+    Return custom ping target rows that the given user may use.
+    """
+
+    if user and getattr(user, "is_superuser", False):
+        return DiscordPingTarget.objects.filter(is_enabled=True)
+
+    groups = _user_groups(user=user)
+
+    return (
+        DiscordPingTarget.objects.filter(
+            Q(restricted_to_group__in=groups) | Q(restricted_to_group__isnull=True),
+            is_enabled=True,
+        )
+        .distinct()
+        .order_by("name")
+    )
+
+
+class ReminderOptionsFormMixin:
+    """
+    Shared reminder interval validation.
+    """
+
+    reminder_offsets = forms.MultipleChoiceField(
+        required=False,
+        choices=_reminder_interval_choices(),
+        widget=forms.CheckboxSelectMultiple,
+        label=_("Reminder intervals"),
+        help_text=_("Choose up to 3 reminder intervals to post before formup."),
+    )
+
+    def clean_reminder_configuration(self, require_future_formup: bool = False):
+        """
+        Validate reminder intervals and store their normalized values.
+        """
+
+        cleaned_data = super().clean()
+
+        try:
+            reminder_offsets = validate_selected_offsets(selected_offsets=cleaned_data.get("reminder_offsets"))
+        except forms.ValidationError as ex:
+            self.add_error("reminder_offsets", ex)
+            reminder_offsets = []
+
+        if reminder_offsets:
+            pre_ping = cleaned_data.get("pre_ping", True)
+            ping_channel = cleaned_data.get("ping_channel")
+            formup_now = cleaned_data.get("formup_now", False)
+            formup_timestamp = cleaned_data.get("formup_timestamp")
+
+            if not pre_ping:
+                self.add_error(
+                    "reminder_offsets",
+                    _("Reminder scheduling is only available for pre-pings."),
+                )
+
+            if not ping_channel:
+                self.add_error(
+                    "ping_channel",
+                    _("Please choose a webhook channel before scheduling reminders."),
+                )
+
+            if formup_now:
+                self.add_error(
+                    "formup_now",
+                    _("Scheduled reminders require a formup time."),
+                )
+
+            if not formup_timestamp:
+                self.add_error(
+                    "formup_time",
+                    _("Scheduled reminders require a valid formup time."),
+                )
+            elif require_future_formup:
+                try:
+                    formup_at = datetime.fromtimestamp(
+                        timestamp=float(formup_timestamp),
+                        tz=datetime_timezone.utc,
+                    )
+                except (TypeError, ValueError):
+                    self.add_error(
+                        "formup_time",
+                        _("Scheduled reminders require a valid formup time."),
+                    )
+                else:
+                    if formup_at <= timezone.now():
+                        self.add_error(
+                            "formup_time",
+                            _("Scheduled reminders require a future formup time."),
+                        )
+
+        cleaned_data["reminder_offsets"] = reminder_offsets
+
+        return cleaned_data
+
+    def validate_user_access_to_targets(self, cleaned_data: dict) -> dict:
+        """
+        Ensure the current user may use the submitted ping target and webhook.
+        """
+
+        user = getattr(self, "user", None)
+
+        if not user:
+            return cleaned_data
+
+        ping_target = str(cleaned_data.get("ping_target", "") or "").strip()
+        ping_channel = str(cleaned_data.get("ping_channel", "") or "").strip()
+
+        if ping_target in {"@here", "@everyone"}:
+            if not Setting.objects.get_setting(Setting.Field.USE_DEFAULT_PING_TARGETS):
+                self.add_error("ping_target", _("This ping target is not available to you."))
+        elif ping_target and not _allowed_ping_targets_for_user(user=user).filter(
+            discord_id=ping_target
+        ).exists():
+            self.add_error("ping_target", _("This ping target is not available to you."))
+
+        if ping_channel:
+            try:
+                ping_channel_id = int(ping_channel)
+            except (TypeError, ValueError):
+                self.add_error("ping_channel", _("Please choose a valid webhook channel."))
+            else:
+                if not _allowed_webhooks_for_user(user=user).filter(pk=ping_channel_id).exists():
+                    self.add_error("ping_channel", _("This webhook channel is not available to you."))
+
+        return cleaned_data
+
+
+ReminderOptionsFormMixin.declared_fields = {
+    "reminder_offsets": ReminderOptionsFormMixin.reminder_offsets,
+}
+ReminderOptionsFormMixin.base_fields = ReminderOptionsFormMixin.declared_fields.copy()
 
 
 def _get_discord_markdown_hint_text() -> str:
@@ -84,7 +274,7 @@ class SettingAdminForm(forms.ModelForm):
         widgets = {"default_embed_color": forms.TextInput(attrs={"type": "color"})}
 
 
-class FleetPingTemplateAdminForm(forms.ModelForm):
+class FleetPingTemplateAdminForm(ReminderOptionsFormMixin, forms.ModelForm):
     """
     Form definitions for the FleetPingTemplate form in admin
     """
@@ -113,7 +303,7 @@ class FleetPingTemplateAdminForm(forms.ModelForm):
         """
 
         model = FleetPingTemplate
-        fields = "__all__"
+        exclude = ("verification_offsets",)
         widgets = {
             "additional_information": forms.Textarea(attrs={"rows": 6}),
         }
@@ -137,28 +327,17 @@ class FleetPingTemplateAdminForm(forms.ModelForm):
         self.fields["fleet_comms"].choices = self._get_fleet_comms_choices()
         self.fields["fleet_doctrine"].choices = self._get_fleet_doctrine_choices()
         self.fields["formup_time_mode"].choices = self._get_formup_time_mode_choices()
+        self.initial["reminder_offsets"] = _initial_interval_selection(
+            self.instance.reminder_offsets or []
+        )
 
-        self._append_instance_value(
-            field_name="ping_target", field_value=self.instance.ping_target
-        )
-        self._append_instance_value(
-            field_name="ping_channel", field_value=self.instance.ping_channel
-        )
-        self._append_instance_value(
-            field_name="fleet_type", field_value=self.instance.fleet_type
-        )
-        self._append_instance_value(
-            field_name="formup_location", field_value=self.instance.formup_location
-        )
-        self._append_instance_value(
-            field_name="fleet_comms", field_value=self.instance.fleet_comms
-        )
-        self._append_instance_value(
-            field_name="fleet_doctrine", field_value=self.instance.fleet_doctrine
-        )
-        self._append_instance_value(
-            field_name="formup_time_mode", field_value=self.instance.formup_time_mode
-        )
+        self._append_instance_value(field_name="ping_target", field_value=self.instance.ping_target)
+        self._append_instance_value(field_name="ping_channel", field_value=self.instance.ping_channel)
+        self._append_instance_value(field_name="fleet_type", field_value=self.instance.fleet_type)
+        self._append_instance_value(field_name="formup_location", field_value=self.instance.formup_location)
+        self._append_instance_value(field_name="fleet_comms", field_value=self.instance.fleet_comms)
+        self._append_instance_value(field_name="fleet_doctrine", field_value=self.instance.fleet_doctrine)
+        self._append_instance_value(field_name="formup_time_mode", field_value=self.instance.formup_time_mode)
 
         if "fleet_doctrine_url" in self.fields:
             self.fields["fleet_doctrine_url"].widget = forms.HiddenInput()
@@ -186,9 +365,7 @@ class FleetPingTemplateAdminForm(forms.ModelForm):
         """
 
         for field_name in self.dynamic_choice_fields:
-            self.fields[field_name].help_text = self._meta.model._meta.get_field(
-                field_name
-            ).help_text
+            self.fields[field_name].help_text = self._meta.model._meta.get_field(field_name).help_text
 
     def _configure_optional_fields(self):
         """
@@ -351,9 +528,7 @@ class FleetPingTemplateAdminForm(forms.ModelForm):
 
         choices = [("", _("Do not prefill"))]
 
-        for formup_location in FormupLocation.objects.filter(is_enabled=True).order_by(
-            "name"
-        ):
+        for formup_location in FormupLocation.objects.filter(is_enabled=True).order_by("name"):
             choices.append((str(formup_location), str(formup_location)))
 
         return choices
@@ -383,11 +558,10 @@ class FleetPingTemplateAdminForm(forms.ModelForm):
             if not self.request:
                 return choices
 
+            # Third Party
             from fittings.views import _get_docs_qs
 
-            for doctrine in _get_docs_qs(self.request, self._request_groups()).order_by(
-                "name"
-            ):
+            for doctrine in _get_docs_qs(self.request, self._request_groups()).order_by("name"):
                 choices.append((doctrine.name, doctrine.name))
                 self._doctrine_url_map[doctrine.name] = reverse_absolute(
                     viewname="fittings:view_doctrine", args=[doctrine.pk]
@@ -397,8 +571,7 @@ class FleetPingTemplateAdminForm(forms.ModelForm):
 
         doctrines = (
             FleetDoctrine.objects.filter(
-                Q(restricted_to_group__in=self._request_groups())
-                | Q(restricted_to_group__isnull=True),
+                Q(restricted_to_group__in=self._request_groups()) | Q(restricted_to_group__isnull=True),
                 is_enabled=True,
             )
             .distinct()
@@ -427,7 +600,7 @@ class FleetPingTemplateAdminForm(forms.ModelForm):
         Populate derived template values.
         """
 
-        cleaned_data = super().clean()
+        cleaned_data = self.clean_reminder_configuration()
         fleet_doctrine = cleaned_data.get("fleet_doctrine")
 
         if "fleet_doctrine_url" in self.fields:
@@ -438,7 +611,7 @@ class FleetPingTemplateAdminForm(forms.ModelForm):
         return cleaned_data
 
 
-class FleetPingForm(forms.Form):
+class FleetPingForm(ReminderOptionsFormMixin, forms.Form):
     """
     Form definitions for the FleetPing form
     """
@@ -461,9 +634,7 @@ class FleetPingForm(forms.Form):
         widget=forms.Select(choices={}),
         help_text=_("Select a channel to ping automatically."),
     )
-    fleet_type = forms.CharField(
-        required=False, label=_("Fleet type"), widget=forms.Select(choices={})
-    )
+    fleet_type = forms.CharField(required=False, label=_("Fleet type"), widget=forms.Select(choices={}))
     fleet_commander = forms.CharField(
         required=False,
         label=_("FC name"),
@@ -480,18 +651,12 @@ class FleetPingForm(forms.Form):
         required=False,
         label=_("Fleet name"),
         max_length=254,
-        widget=forms.TextInput(
-            attrs={
-                "placeholder": _("What is the fleet name in the fleet finder in Eve?")
-            }
-        ),
+        widget=forms.TextInput(attrs={"placeholder": _("What is the fleet name in the fleet finder in Eve?")}),
     )
     formup_location = forms.CharField(
         required=False,
         label=_("Formup location"),
-        widget=forms.TextInput(
-            attrs={"data-datalist": "formup-location-list", "data-full-width": "true"}
-        ),
+        widget=forms.TextInput(attrs={"data-datalist": "formup-location-list", "data-full-width": "true"}),
     )
     formup_time = forms.CharField(
         required=False,
@@ -526,16 +691,12 @@ class FleetPingForm(forms.Form):
     fleet_comms = forms.CharField(
         required=False,
         label=_("Fleet comms"),
-        widget=forms.TextInput(
-            attrs={"data-datalist": "fleet-comms-list", "data-full-width": "true"}
-        ),
+        widget=forms.TextInput(attrs={"data-datalist": "fleet-comms-list", "data-full-width": "true"}),
     )
     fleet_doctrine = forms.CharField(
         required=False,
         label=_("Doctrine"),
-        widget=forms.TextInput(
-            attrs={"data-datalist": "fleet-doctrine-list", "data-full-width": "true"}
-        ),
+        widget=forms.TextInput(attrs={"data-datalist": "fleet-doctrine-list", "data-full-width": "true"}),
     )
     fleet_doctrine_url = forms.CharField(
         required=False,
@@ -570,9 +731,7 @@ class FleetPingForm(forms.Form):
                 "rows": 10,
                 "cols": 20,
                 "input_type": "textarea",
-                "placeholder": _(
-                    "Feel free to add some more information about the fleet…"
-                ),
+                "placeholder": _("Feel free to add some more information about the fleet…"),
             }
         ),
         help_text=_get_discord_markdown_hint_text(),
@@ -581,13 +740,77 @@ class FleetPingForm(forms.Form):
         initial=False,
         required=False,
         label=_("Create Optimer"),
-        help_text=_(
-            "If this checkbox is active, a fleet operations timer for this pre-ping "
-            "will be created."
-        ),
+        help_text=_("If this checkbox is active, a fleet operations timer for this pre-ping " "will be created."),
     )
     fleet_duration = forms.CharField(
         required=False,
         label=_("Duration"),
         help_text=_("How long approximately will the fleet be?"),
     )
+
+    def __init__(self, *args, **kwargs):
+        """
+        Store the current user so backend validation can enforce access rules.
+        """
+
+        self.user = kwargs.pop("user", None)
+
+        super().__init__(*args, **kwargs)
+
+    def clean(self):
+        """
+        Validate fleet ping reminder configuration.
+        """
+
+        cleaned_data = self.clean_reminder_configuration(require_future_formup=True)
+
+        return self.validate_user_access_to_targets(cleaned_data=cleaned_data)
+
+
+class FleetPingScheduleUpdateForm(ReminderOptionsFormMixin, forms.Form):
+    """
+    Form for updating a scheduled fleet ping.
+    """
+
+    ping_target = forms.CharField(required=False, label=_("Ping target"))
+    ping_channel = forms.CharField(required=False, label=_("Ping to"))
+    fleet_type = forms.CharField(required=False, label=_("Fleet type"))
+    fleet_commander = forms.CharField(required=False, label=_("FC name"))
+    fleet_name = forms.CharField(required=False, label=_("Fleet name"))
+    formup_location = forms.CharField(required=False, label=_("Formup location"))
+    formup_timestamp = forms.CharField(required=False, label=_("Formup timestamp"))
+    formup_time = forms.CharField(required=False, label=_("Formup time"))
+    fleet_duration = forms.CharField(required=False, label=_("Duration"))
+    fleet_comms = forms.CharField(required=False, label=_("Fleet comms"))
+    fleet_doctrine = forms.CharField(required=False, label=_("Doctrine"))
+    fleet_doctrine_url = forms.CharField(required=False, label=_("Doctrine link"))
+    webhook_embed_color = forms.CharField(
+        required=False,
+        label=_("Webhook embed color"),
+    )
+    srp = forms.BooleanField(required=False, initial=False, label=_("SRP"))
+    additional_information = forms.CharField(
+        required=False,
+        label=_("Additional information"),
+        widget=forms.Textarea,
+    )
+    pre_ping = forms.BooleanField(required=False, initial=True)
+    formup_now = forms.BooleanField(required=False, initial=False)
+
+    def __init__(self, *args, **kwargs):
+        """
+        Store the current user so backend validation can enforce access rules.
+        """
+
+        self.user = kwargs.pop("user", None)
+
+        super().__init__(*args, **kwargs)
+
+    def clean(self):
+        """
+        Validate update payloads for scheduled reminders.
+        """
+
+        cleaned_data = self.clean_reminder_configuration(require_future_formup=True)
+
+        return self.validate_user_access_to_targets(cleaned_data=cleaned_data)

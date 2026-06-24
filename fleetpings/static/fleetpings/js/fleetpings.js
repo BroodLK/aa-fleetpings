@@ -39,15 +39,45 @@ $(document).ready(() => {
         fleetDoctrineUrl: $('#id_fleet_doctrine_url'),
         webhookEmbedColor: $('#id_webhook_embed_color'),
         additionalInformation: $('#id_additional_information'),
-        templateList: $('#fleetpings-template-list')
+        templateList: $('#fleetpings-template-list'),
+        reminderSettings: $('.fleetpings-reminder-settings'),
+        reminderOffsets: $('input[name="reminder_offsets"]'),
+        upcomingList: $('#fleetpings-upcoming-list'),
+        upcomingModal: $('#fleetpings-upcoming-modal'),
+        upcomingId: $('#fleetpings-upcoming-id'),
+        upcomingFormupTimestamp: $('#fleetpings-upcoming-formup-timestamp'),
+        upcomingWebhookEmbedColor: $('#fleetpings-upcoming-webhook-embed-color'),
+        upcomingMessage: $('#fleetpings-upcoming-modal-message'),
+        upcomingFleetCommander: $('#fleetpings-upcoming-fc'),
+        upcomingFleetName: $('#fleetpings-upcoming-fleet-name'),
+        upcomingFormupLocation: $('#fleetpings-upcoming-formup-location'),
+        upcomingFormupTime: $('#fleetpings-upcoming-formup-time'),
+        upcomingFleetDuration: $('#fleetpings-upcoming-fleet-duration'),
+        upcomingFleetComms: $('#fleetpings-upcoming-fleet-comms'),
+        upcomingSrp: $('#fleetpings-upcoming-srp'),
+        upcomingPingTarget: $('#fleetpings-upcoming-ping-target'),
+        upcomingPingChannel: $('#fleetpings-upcoming-ping-channel'),
+        upcomingFleetType: $('#fleetpings-upcoming-fleet-type'),
+        upcomingDoctrine: $('#fleetpings-upcoming-doctrine'),
+        upcomingDoctrineUrl: $('#fleetpings-upcoming-doctrine-url'),
+        upcomingAdditionalInformation: $('#fleetpings-upcoming-additional-information'),
+        upcomingReminderOffsets: $('#fleetpings-upcoming-reminder-offsets'),
+        upcomingCancelMessage: $('#fleetpings-upcoming-cancel-message'),
+        upcomingSave: $('#fleetpings-upcoming-save'),
+        upcomingCancelSilent: $('#fleetpings-upcoming-cancel-silent'),
+        upcomingCancelNotify: $('#fleetpings-upcoming-cancel-notify')
     };
 
     const state = {
         formupTimeMode: 'eve',
         optimerOverlapCandidateTimestamp: null,
         optimerOverlapConflictTimestamp: null,
-        optimerOverlapRelation: ''
+        optimerOverlapRelation: '',
+        upcomingSchedules: []
     };
+    const maxReminderSelections = 3;
+
+    const clickableToggleSelector = '.aa-fleetpings-toggle-card, .fleetpings-reminder-settings .form-check, #fleetpings-upcoming-reminder-offsets .form-check';
 
     /* Initialize datetime picker */
     elements.formupTime.datetimepicker({
@@ -127,6 +157,16 @@ $(document).ready(() => {
          */
         getPastFormupTimeMessage: () => {
             return elements.formupTimeModeContainer.attr('data-time-in-past');
+        },
+
+        /**
+         * Check whether a click target is already handled by a native interactive control.
+         *
+         * @param {HTMLElement} target The clicked element.
+         * @returns {boolean} True if the target should keep its default behavior.
+         */
+        isNativeInteractiveTarget: (target) => {
+            return $(target).closest('a, button, input, label, select, textarea').length > 0;
         },
 
         /**
@@ -271,6 +311,132 @@ $(document).ready(() => {
             return formatter.format(difference, 'second');
         },
 
+        formatUpcomingLocalDateTime: (timestamp) => {
+            if (!timestamp) {
+                return 'TBD';
+            }
+
+            return new Intl.DateTimeFormat(fleetpingsSettings.dateTimeLocale, {
+                year: 'numeric',
+                month: 'short',
+                day: '2-digit',
+                hour: 'numeric',
+                minute: '2-digit',
+                timeZoneName: 'short'
+            }).format(new Date(timestamp * 1000));
+        },
+
+        formatUpcomingEveDateTime: (timestamp) => {
+            if (!timestamp) {
+                return 'TBD';
+            }
+
+            return new Intl.DateTimeFormat(fleetpingsSettings.dateTimeLocale, {
+                timeZone: 'UTC',
+                year: 'numeric',
+                month: 'short',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).format(new Date(timestamp * 1000));
+        },
+
+        getUpcomingModalInstance: () => {
+            if (!elements.upcomingModal.length) {
+                return null;
+            }
+
+            return bootstrap.Modal.getOrCreateInstance(elements.upcomingModal[0]);
+        },
+
+        buildUrlFromBase: (base, identifier) => {
+            return String(base).replace(/0\/$/, `${identifier}/`);
+        },
+
+        serializeForm: (formSelector) => {
+            return $(formSelector).serializeArray().reduce((obj, item) => {
+                if (Object.prototype.hasOwnProperty.call(obj, item.name)) {
+                    if (!Array.isArray(obj[item.name])) {
+                        obj[item.name] = [obj[item.name]];
+                    }
+
+                    obj[item.name].push(item.value);
+                } else {
+                    obj[item.name] = item.value;
+                }
+
+                return obj;
+            }, {});
+        },
+
+        unixToLocalDateTimeValue: (timestamp) => {
+            if (!timestamp) {
+                return '';
+            }
+
+            const date = new Date(timestamp * 1000);
+            const year = date.getFullYear();
+            const month = utils.formatDateTimePart(date.getMonth() + 1);
+            const day = utils.formatDateTimePart(date.getDate());
+            const hours = utils.formatDateTimePart(date.getHours());
+            const minutes = utils.formatDateTimePart(date.getMinutes());
+
+            return `${year}-${month}-${day}T${hours}:${minutes}`;
+        },
+
+        localDateTimeValueToUnix: (value) => {
+            if (!value) {
+                return '';
+            }
+
+            const parsedDate = new Date(value);
+
+            if (Number.isNaN(parsedDate.getTime())) {
+                return '';
+            }
+
+            return String(Math.floor(parsedDate.getTime() / 1000));
+        },
+
+        renderCheckboxGroup: (container, fieldName, checkedValues) => {
+            const reminderChoices = [
+                {value: '1440', label: '24h'},
+                {value: '720', label: '12h'},
+                {value: '480', label: '8h'},
+                {value: '180', label: '3h'},
+                {value: '60', label: '1h'},
+                {value: '15', label: '15m'}
+            ];
+
+            container.empty();
+
+            reminderChoices.forEach((choice) => {
+                const identifier = `${fieldName}-${choice.value}`;
+                const wrapper = $('<div>', {class: 'form-check aa-fleetpings-upcoming-check'});
+                const input = $('<input>', {
+                    id: identifier,
+                    class: 'form-check-input',
+                    type: 'checkbox',
+                    name: fieldName,
+                    value: choice.value
+                });
+
+                if ((checkedValues || []).includes(choice.value)) {
+                    input.prop('checked', true);
+                }
+
+                const label = $('<label>', {
+                    class: 'form-check-label',
+                    for: identifier,
+                    text: choice.label
+                });
+
+                wrapper.append(input, label);
+                container.append(wrapper);
+            });
+        },
+
         /**
          * Display a message in the specified element.
          * This function creates an alert message with a close button and optional auto-close functionality.
@@ -389,6 +555,27 @@ $(document).ready(() => {
             }
         },
 
+        loadUpcomingSchedules: async () => {
+            if (!elements.upcomingList.length) {
+                return;
+            }
+
+            try {
+                const data = await fetchGet({
+                    url: fleetpingsSettings.url.upcomingSchedules,
+                    responseIsJson: true
+                });
+
+                state.upcomingSchedules = data.schedules || [];
+                handlers.renderUpcomingSchedules(state.upcomingSchedules);
+            } catch (error) {
+                console.error('Error loading upcoming schedules:', error);
+                elements.upcomingList.html(
+                    `<div class="small text-danger">${elements.upcomingList.data('error-message')}</div>`
+                );
+            }
+        },
+
         /**
          * Initialize the data loader by loading all necessary data for the form.
          *
@@ -410,6 +597,7 @@ $(document).ready(() => {
             ]);
 
             await dataLoader.loadTemplates();
+            await dataLoader.loadUpcomingSchedules();
         }
     };
 
@@ -496,12 +684,127 @@ $(document).ready(() => {
             });
         },
 
+        renderUpcomingSchedules: (schedules) => {
+            if (!elements.upcomingList.length) {
+                return;
+            }
+
+            elements.upcomingList.empty();
+
+            if (!schedules.length) {
+                elements.upcomingList.append(
+                    $('<div>', {
+                        class: 'aa-fleetpings-upcoming-empty small text-muted',
+                        text: elements.upcomingList.data('empty-message')
+                    })
+                );
+
+                return;
+            }
+
+            schedules.forEach((schedule) => {
+                const item = $(schedule.can_edit ? '<button>' : '<div>', schedule.can_edit
+                    ? {
+                        type: 'button',
+                        class: 'btn aa-fleetpings-upcoming-item aa-fleetpings-upcoming-item-editable text-start',
+                        'data-schedule-id': schedule.id,
+                        'data-next-reminder-at': schedule.next_reminder_at || ''
+                    }
+                    : {
+                        class: 'aa-fleetpings-upcoming-item aa-fleetpings-upcoming-item-readonly text-start',
+                        'data-schedule-id': schedule.id,
+                        'data-next-reminder-at': schedule.next_reminder_at || ''
+                    });
+                const titleRow = $('<div>', {class: 'aa-fleetpings-upcoming-item-header'});
+                const meta = $('<div>', {class: 'aa-fleetpings-upcoming-item-meta'});
+                const titleParts = [
+                    schedule.fleet_commander,
+                    schedule.fleet_type
+                ];
+                const titleText = (() => {
+                    if (schedule.fleet_doctrine) {
+                        titleParts.push(schedule.fleet_doctrine);
+                    }
+
+                    return titleParts.filter(Boolean).join(' - ') || schedule.fleet_name || 'Upcoming Fleet';
+                })();
+                const countdownText = schedule.next_reminder_at
+                    ? `Next ${schedule.next_reminder_label}: ${utils.formatRelativeTime(schedule.next_reminder_at)}`
+                    : 'No reminders pending';
+                const appendMetaStat = (label, value) => {
+                    meta.append(
+                        $('<span>', {
+                            class: 'aa-fleetpings-upcoming-item-stat'
+                        }).append(
+                            $('<span>', {
+                                class: 'aa-fleetpings-upcoming-item-stat-label',
+                                text: `${label}:`
+                            }),
+                            document.createTextNode(` ${value}`)
+                        )
+                    );
+                };
+
+                titleRow.append(
+                    $('<span>', {
+                        class: 'aa-fleetpings-upcoming-item-title',
+                        text: titleText
+                    })
+                );
+
+                appendMetaStat('Local', utils.formatUpcomingLocalDateTime(schedule.formup_at));
+                appendMetaStat('EVE', `${utils.formatUpcomingEveDateTime(schedule.formup_at)} UTC`);
+                appendMetaStat('Additional information', schedule.additional_information || 'None');
+                appendMetaStat('SRP', schedule.srp ? 'Yes' : 'No');
+                appendMetaStat('Remaining reminders', String(schedule.remaining_reminders));
+
+                meta.append(
+                    $('<span>', {
+                        class: `aa-fleetpings-upcoming-item-permission ${schedule.can_edit ? 'text-primary' : 'text-muted'}`,
+                        text: schedule.can_edit ? 'Editable by you' : 'View only'
+                    })
+                );
+
+                item.append(titleRow);
+                item.append(meta);
+                item.append(
+                    $('<span>', {
+                        class: 'aa-fleetpings-upcoming-item-countdown fleetpings-upcoming-countdown',
+                        'data-next-reminder-at': schedule.next_reminder_at || '',
+                        'data-reminder-label': schedule.next_reminder_label || 'Reminder',
+                        text: countdownText
+                    })
+                );
+
+                if (schedule.can_edit) {
+                    item.on('click', async () => {
+                        await handlers.openUpcomingScheduleModal(schedule.id);
+                    });
+                }
+
+                elements.upcomingList.append(item);
+            });
+        },
+
+        refreshUpcomingCountdowns: () => {
+            elements.upcomingList.find('.fleetpings-upcoming-countdown').each((index, element) => {
+                const nextReminderAt = Number($(element).data('next-reminder-at'));
+                const reminderLabel = $(element).data('reminder-label') || 'Reminder';
+
+                if (!nextReminderAt) {
+                    return;
+                }
+
+                $(element).text(`Next ${reminderLabel}: ${utils.formatRelativeTime(nextReminderAt)}`);
+            });
+        },
+
         /**
          * Synchronize the FC field with the current user's main character.
          *
          * @returns {void}
          */
-        syncFleetCommanderWithMain: () => {
+        syncFleetCommanderWithMain: (clearOnDisable = false) => {
             if (!elements.useMain.length) {
                 return;
             }
@@ -512,6 +815,8 @@ $(document).ready(() => {
 
             if (canUseMain) {
                 elements.fleetCommander.val(mainCharacterName);
+            } else if (clearOnDisable) {
+                elements.fleetCommander.val('');
             }
 
             elements.fleetCommander.prop('readonly', canUseMain);
@@ -551,6 +856,37 @@ $(document).ready(() => {
                     elements.createSrpLink.prop('checked', false);
                 }
             }
+
+            if (isPrePingChecked && !isFormupNow) {
+                elements.reminderSettings.show('fast');
+            } else {
+                elements.reminderSettings.hide('fast');
+                elements.reminderOffsets.prop('checked', false);
+            }
+
+            handlers.syncReminderOffsetSelection();
+        },
+
+        syncReminderOffsetSelection: (event) => {
+            const changedInput = event && event.target ? $(event.target) : $();
+            let checkedInputs = elements.reminderOffsets.filter(':checked');
+
+            if (changedInput.length && changedInput.is(':checked') && checkedInputs.length > maxReminderSelections) {
+                changedInput.prop('checked', false);
+                checkedInputs = elements.reminderOffsets.filter(':checked');
+            }
+
+            const shouldDisableUncheckedOptions = checkedInputs.length >= maxReminderSelections;
+
+            elements.reminderOffsets.each((index, element) => {
+                const input = $(element);
+                const isDisabled = shouldDisableUncheckedOptions && !input.is(':checked');
+
+                input
+                    .prop('disabled', isDisabled)
+                    .closest('.form-check')
+                    .toggleClass('aa-fleetpings-option-disabled', isDisabled);
+            });
         },
 
         /**
@@ -666,6 +1002,15 @@ $(document).ready(() => {
 
             setCheckboxValue(elements.createSrpLink, templateFields.srp_link);
             setCheckboxValue(elements.createOptimer, templateFields.optimer);
+            elements.reminderOffsets.prop('checked', false);
+
+            (templateFields.reminder_offsets || []).forEach((offset) => {
+                const selector = elements.reminderOffsets.filter(`[value="${offset}"]`);
+
+                if (selector.length) {
+                    selector.prop('checked', true);
+                }
+            });
 
             handlers.updateCheckboxVisibility();
             handlers.updateFormupTimeDisplay();
@@ -832,6 +1177,169 @@ $(document).ready(() => {
             handlers.updateOptimerOverlapWarning();
         },
 
+        openUpcomingScheduleModal: async (scheduleId) => {
+            try {
+                const data = await fetchGet({
+                    url: utils.buildUrlFromBase(fleetpingsSettings.url.upcomingScheduleDetailBase, scheduleId),
+                    responseIsJson: true
+                });
+                const schedule = data.schedule;
+                const presetValues = new Set(['1440', '720', '480', '180', '60', '15']);
+                const reminderSelections = (schedule.reminder_offsets || []).filter((offset) => {
+                    return presetValues.has(String(offset));
+                }).map((offset) => {
+                    return String(offset);
+                });
+
+                elements.upcomingId.val(schedule.id);
+                elements.upcomingFormupTimestamp.val(schedule.formup_at);
+                elements.upcomingWebhookEmbedColor.val(schedule.webhook_embed_color || '');
+                elements.upcomingFleetCommander.val(schedule.fleet_commander || '');
+                elements.upcomingFleetName.val(schedule.fleet_name || '');
+                elements.upcomingFormupLocation.val(schedule.formup_location || '');
+                elements.upcomingFormupTime.val(utils.unixToLocalDateTimeValue(schedule.formup_at));
+                elements.upcomingFleetDuration.val(schedule.fleet_duration || '');
+                elements.upcomingFleetComms.val(schedule.fleet_comms || '');
+                elements.upcomingSrp.prop('checked', Boolean(schedule.srp));
+                elements.upcomingPingTarget.val(schedule.ping_target || '');
+                elements.upcomingFleetType.val(schedule.fleet_type || '');
+                elements.upcomingDoctrine.val(schedule.fleet_doctrine || '');
+                elements.upcomingDoctrineUrl.val(schedule.fleet_doctrine_url || '');
+                elements.upcomingAdditionalInformation.val(schedule.additional_information || '');
+                elements.upcomingCancelMessage.val('');
+                elements.upcomingPingChannel.html(elements.pingChannel.html());
+                elements.upcomingPingChannel.val(schedule.ping_channel || '');
+                utils.renderCheckboxGroup(elements.upcomingReminderOffsets, 'upcoming_reminder_offsets', reminderSelections);
+                handlers.syncUpcomingReminderOffsetSelection();
+                elements.upcomingMessage.empty();
+                utils.getUpcomingModalInstance()?.show();
+            } catch (error) {
+                console.error('Error loading upcoming schedule detail:', error);
+            }
+        },
+
+        syncUpcomingReminderOffsetSelection: (event) => {
+            const changedInput = event && event.target ? $(event.target) : $();
+            let checkedInputs = elements.upcomingReminderOffsets.find('input:checked');
+
+            if (changedInput.length && changedInput.is(':checked') && checkedInputs.length > maxReminderSelections) {
+                changedInput.prop('checked', false);
+                checkedInputs = elements.upcomingReminderOffsets.find('input:checked');
+            }
+
+            const shouldDisableUncheckedOptions = checkedInputs.length >= maxReminderSelections;
+
+            elements.upcomingReminderOffsets.find('input').each((index, element) => {
+                const input = $(element);
+                const isDisabled = shouldDisableUncheckedOptions && !input.is(':checked');
+
+                input
+                    .prop('disabled', isDisabled)
+                    .closest('.form-check')
+                    .toggleClass('aa-fleetpings-option-disabled', isDisabled);
+            });
+        },
+
+        collectUpcomingSchedulePayload: () => {
+            return {
+                ping_target: utils.sanitizeInput(elements.upcomingPingTarget.val()),
+                ping_channel: utils.sanitizeInput(elements.upcomingPingChannel.val()),
+                fleet_type: utils.sanitizeInput(elements.upcomingFleetType.val()),
+                fleet_commander: utils.sanitizeInput(elements.upcomingFleetCommander.val()),
+                fleet_name: utils.sanitizeInput(elements.upcomingFleetName.val()),
+                formup_location: utils.sanitizeInput(elements.upcomingFormupLocation.val()),
+                formup_time: utils.sanitizeInput(elements.upcomingFormupTime.val()),
+                formup_timestamp: utils.localDateTimeValueToUnix(elements.upcomingFormupTime.val()),
+                fleet_duration: utils.sanitizeInput(elements.upcomingFleetDuration.val()),
+                fleet_comms: utils.sanitizeInput(elements.upcomingFleetComms.val()),
+                fleet_doctrine: utils.sanitizeInput(elements.upcomingDoctrine.val()),
+                fleet_doctrine_url: utils.sanitizeInput(elements.upcomingDoctrineUrl.val()),
+                webhook_embed_color: utils.sanitizeInput(elements.upcomingWebhookEmbedColor.val()),
+                additional_information: utils.sanitizeInput(elements.upcomingAdditionalInformation.val()),
+                srp: elements.upcomingSrp.is(':checked'),
+                pre_ping: true,
+                formup_now: false,
+                reminder_offsets: elements.upcomingReminderOffsets.find('input:checked').map((index, element) => {
+                    return $(element).val();
+                }).get()
+            };
+        },
+
+        submitUpcomingScheduleUpdate: async () => {
+            try {
+                const scheduleId = elements.upcomingId.val();
+                const data = await fetchPost({
+                    url: utils.buildUrlFromBase(fleetpingsSettings.url.upcomingScheduleUpdateBase, scheduleId),
+                    csrfToken: elements.csrfToken.val(),
+                    payload: handlers.collectUpcomingSchedulePayload(),
+                    responseIsJson: true
+                });
+
+                if (data.success) {
+                    utils.showMessage(data.message || fleetpingsSettings.translation.upcoming.updated, '#fleetpings-upcoming-modal-message');
+                    await dataLoader.loadUpcomingSchedules();
+                } else {
+                    utils.showMessage(
+                        data.message || 'Something went wrong, no details given.',
+                        '#fleetpings-upcoming-modal-message',
+                        'error'
+                    );
+                }
+            } catch (error) {
+                console.error('Error updating upcoming schedule:', error);
+                utils.showMessage(
+                    error.message || 'Something went wrong, no details given.',
+                    '#fleetpings-upcoming-modal-message',
+                    'error'
+                );
+            }
+        },
+
+        cancelUpcomingSchedule: async (notifyWebhook) => {
+            const confirmationMessage = notifyWebhook
+                ? fleetpingsSettings.translation.upcoming.confirmCancelNotify
+                : fleetpingsSettings.translation.upcoming.confirmCancelSilent;
+
+            if (!window.confirm(confirmationMessage)) {
+                return;
+            }
+
+            try {
+                const scheduleId = elements.upcomingId.val();
+                const data = await fetchPost({
+                    url: utils.buildUrlFromBase(fleetpingsSettings.url.upcomingScheduleCancelBase, scheduleId),
+                    csrfToken: elements.csrfToken.val(),
+                    payload: {
+                        notify_webhook: notifyWebhook,
+                        message: utils.sanitizeInput(elements.upcomingCancelMessage.val())
+                    },
+                    responseIsJson: true
+                });
+
+                if (data.success) {
+                    await dataLoader.loadUpcomingSchedules();
+                    utils.getUpcomingModalInstance()?.hide();
+                    utils.showMessage(
+                        data.message || fleetpingsSettings.translation.upcoming.cancelled,
+                        '.fleetpings-form-message'
+                    );
+                } else {
+                    utils.showMessage(
+                        data.message || 'Something went wrong, no details given.',
+                        '#fleetpings-upcoming-modal-message',
+                        'error'
+                    );
+                }
+            } catch (error) {
+                console.error('Error cancelling upcoming schedule:', error);
+                utils.showMessage(
+                    error.message || 'Something went wrong, no details given.',
+                    '#fleetpings-upcoming-modal-message',
+                    'error'
+                );
+            }
+        },
+
         /**
          * Submit the fleet ping form.
          * This function handles the form submission, validates the input fields, and sends the data to the server.
@@ -894,13 +1402,13 @@ $(document).ready(() => {
             }
 
             try {
-                const formData = $('#aa-fleetping-form').serializeArray().reduce((obj, item) => {
-                    obj[item.name] = item.value;
-
-                    return obj;
-                }, {});
+                const formData = utils.serializeForm('#aa-fleetping-form');
+                const selectedReminderOffsets = elements.reminderOffsets.filter(':checked').map((index, element) => {
+                    return $(element).val();
+                }).get();
 
                 delete formData.fleetpings_formup_time_mode;
+                formData.reminder_offsets = selectedReminderOffsets;
 
                 if (elements.formupTimeNow.is(':checked') || !formupTimeValue) {
                     formData.formup_time = '';
@@ -921,6 +1429,7 @@ $(document).ready(() => {
                     $('.aa-fleetpings-no-ping').hide('fast');
                     $('.aa-fleetpings-ping').show('fast');
                     $('.aa-fleetpings-ping-text').html(data.ping_context);
+                    await dataLoader.loadUpcomingSchedules();
 
                     if (data.message) {
                         utils.showMessage(
@@ -944,6 +1453,26 @@ $(document).ready(() => {
                     'error'
                 );
             }
+        },
+
+        /**
+         * Toggle a checkbox when its visual wrapper is clicked.
+         *
+         * @param {Event} event The click event.
+         * @returns {void}
+         */
+        toggleCheckboxWrapper: (event) => {
+            if (utils.isNativeInteractiveTarget(event.target)) {
+                return;
+            }
+
+            const checkbox = $(event.currentTarget).find('input[type="checkbox"]').first();
+
+            if (!checkbox.length || checkbox.is(':disabled')) {
+                return;
+            }
+
+            checkbox.prop('checked', !checkbox.is(':checked')).trigger('change', [{clearOnDisable: true}]);
         }
     };
 
@@ -957,6 +1486,7 @@ $(document).ready(() => {
         handlers.updateOptimerOverlapWarning();
     });
 
+    elements.reminderOffsets.on('change', handlers.syncReminderOffsetSelection);
     elements.formupTimeMode.on('change', handlers.setFormupTimeMode);
 
     elements.fleetType.on('change', () => {
@@ -977,7 +1507,11 @@ $(document).ready(() => {
         handlers.updateOptimerOverlapWarning();
     });
 
-    elements.useMain.on('change', handlers.syncFleetCommanderWithMain);
+    elements.useMain.on('change', (event, options) => {
+        const clearOnDisable = Boolean(event.originalEvent) || Boolean(options && options.clearOnDisable);
+
+        handlers.syncFleetCommanderWithMain(clearOnDisable);
+    });
 
     elements.formupTimeNow.on('change', () => {
         const isChecked = elements.formupTimeNow.is(':checked');
@@ -997,6 +1531,12 @@ $(document).ready(() => {
     if (fleetpingsSettings.srpModuleAvailableToUser) {
         elements.fleetSrp.on('change', handlers.updateCheckboxVisibility);
     }
+
+    elements.upcomingReminderOffsets.on('change', 'input', handlers.syncUpcomingReminderOffsetSelection);
+    elements.upcomingSave.on('click', handlers.submitUpcomingScheduleUpdate);
+    elements.upcomingCancelSilent.on('click', () => handlers.cancelUpcomingSchedule(false));
+    elements.upcomingCancelNotify.on('click', () => handlers.cancelUpcomingSchedule(true));
+    elements.form.on('click', clickableToggleSelector, handlers.toggleCheckboxWrapper);
 
     $('form').on('submit', handlers.submitForm);
 
@@ -1031,6 +1571,7 @@ $(document).ready(() => {
     handlers.updateCheckboxVisibility();
     handlers.syncFleetCommanderWithMain();
     handlers.setFormupTimeMode();
+    window.setInterval(handlers.refreshUpcomingCountdowns, 1000);
     dataLoader.initialize()
         .then(() => console.log('Fleetpings form initialized'))
         .catch((error) => console.error('Error initializing Fleetpings form:', error));

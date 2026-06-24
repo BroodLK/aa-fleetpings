@@ -26,19 +26,14 @@ def get_ping_context_from_form_data(form_data: dict) -> dict:
     ping_target_group_name = None
     ping_target_at_mention = None
 
-    if form_data["ping_target"]:
-        if (
-            form_data["ping_target"] == "@here"
-            or form_data["ping_target"] == "@everyone"
-        ):
-            ping_target_at_mention = str(form_data["ping_target"])
+    if form_data.get("ping_target"):
+        if form_data.get("ping_target") == "@here" or form_data.get("ping_target") == "@everyone":
+            ping_target_at_mention = str(form_data.get("ping_target"))
         else:
             try:
                 # Check if we deal with a custom ping target
-                ping_target = (
-                    DiscordPingTarget.objects.get(  # pylint: disable=no-member
-                        discord_id=form_data["ping_target"]
-                    )
+                ping_target = DiscordPingTarget.objects.get(  # pylint: disable=no-member
+                    discord_id=form_data.get("ping_target")
                 )
             except DiscordPingTarget.DoesNotExist:  # pylint: disable=no-member
                 pass
@@ -47,29 +42,23 @@ def get_ping_context_from_form_data(form_data: dict) -> dict:
                 ping_target_group_id = int(ping_target.discord_id)
                 ping_target_group_name = str(ping_target.name)
                 ping_target_at_mention = (
-                    str(ping_target.name)
-                    if str(ping_target.name).startswith("@")
-                    else f"@{ping_target.name}"
+                    str(ping_target.name) if str(ping_target.name).startswith("@") else f"@{ping_target.name}"
                 )
 
     # Check for webhooks
     ping_channel_webhook = None
-    ping_channel_webhook_embed_color = Setting.objects.get_setting(
-        Setting.Field.DEFAULT_EMBED_COLOR
-    )
+    ping_channel_webhook_embed_color = Setting.objects.get_setting(Setting.Field.DEFAULT_EMBED_COLOR)
 
-    if form_data["ping_channel"]:
+    if form_data.get("ping_channel"):
         try:
-            ping_channel = Webhook.objects.get(  # pylint: disable=no-member
-                pk=form_data["ping_channel"]
-            )
+            ping_channel = Webhook.objects.get(pk=form_data.get("ping_channel"))  # pylint: disable=no-member
         except Webhook.DoesNotExist:  # pylint: disable=no-member
             pass
         else:
             ping_channel_webhook = ping_channel.url
 
-    if form_data["webhook_embed_color"]:
-        ping_channel_webhook_embed_color = form_data["webhook_embed_color"]
+    if form_data.get("webhook_embed_color"):
+        ping_channel_webhook_embed_color = form_data.get("webhook_embed_color")
 
     ping_context = {
         "ping_target": {
@@ -81,28 +70,30 @@ def get_ping_context_from_form_data(form_data: dict) -> dict:
             "webhook": ping_channel_webhook,
             "embed_color": ping_channel_webhook_embed_color,
         },
-        "fleet_type": str(form_data["fleet_type"]),
-        "fleet_commander": str(form_data["fleet_commander"]),
-        "fleet_name": str(form_data["fleet_name"]),
-        "fleet_duration": str(form_data["fleet_duration"]),
-        "formup_location": str(form_data["formup_location"]),
-        "is_pre_ping": bool(form_data["pre_ping"]),
-        "is_formup_now": bool(form_data["formup_now"]),
+        "fleet_type": str(form_data.get("fleet_type", "")),
+        "fleet_commander": str(form_data.get("fleet_commander", "")),
+        "fleet_name": str(form_data.get("fleet_name", "")),
+        "fleet_duration": str(form_data.get("fleet_duration", "")),
+        "formup_location": str(form_data.get("formup_location", "")),
+        "is_pre_ping": bool(form_data.get("pre_ping")),
+        "is_formup_now": bool(form_data.get("formup_now")),
         "formup_time": {
-            "datetime_string": str(form_data["formup_time"]),
-            "timestamp": str(form_data["formup_timestamp"]),
+            "datetime_string": str(form_data.get("formup_time", "")),
+            "timestamp": str(form_data.get("formup_timestamp", "")),
         },
-        "fleet_comms": str(form_data["fleet_comms"]),
+        "fleet_comms": str(form_data.get("fleet_comms", "")),
         "doctrine": {
-            "name": str(form_data["fleet_doctrine"]),
-            "link": str(form_data["fleet_doctrine_url"]),
+            "name": str(form_data.get("fleet_doctrine", "")),
+            "link": str(form_data.get("fleet_doctrine_url", "")),
         },
         "srp": {
-            "has_srp": bool(form_data["srp"]),
-            "create_srp_link": bool(form_data["srp_link"]),
+            "has_srp": bool(form_data.get("srp")),
+            "create_srp_link": bool(form_data.get("srp_link")),
         },
-        "create_optimer": bool(form_data["optimer"]),
-        "additional_information": str(form_data["additional_information"]),
+        "create_optimer": bool(form_data.get("optimer")),
+        "additional_information": str(form_data.get("additional_information", "")),
+        "ping_kind": str(form_data.get("ping_kind", "standard") or "standard"),
+        "reminder_label": str(form_data.get("reminder_label", "")),
         "timezones_installed": timezones_installed(),
         "optimer_installed": optimer_installed(),
         "fittings_installed": fittings_installed(),
@@ -123,6 +114,8 @@ def _get_webhook_ping_context(ping_context: dict) -> dict:
     webhook_ping_text_content = ""
     webhook_ping_text_footer = ""
     webhook_ping_target = ""
+    is_reminder_ping = ping_context.get("ping_kind") == "reminder"
+    reminder_label = str(ping_context.get("reminder_label", "") or "")
 
     # Ping target
     if ping_context["ping_target"]["group_id"]:
@@ -136,14 +129,17 @@ def _get_webhook_ping_context(ping_context: dict) -> dict:
 
     webhook_ping_text_header += "**"
 
-    # Check if it's a pre-ping or not
-    if ping_context["is_pre_ping"]:
+    # Check if it's a reminder, pre-ping or live ping.
+    if is_reminder_ping:
+        webhook_ping_text_header += "Reminder Ping"
+
+        if ping_context["fleet_type"]:
+            webhook_ping_text_header += f' / (Upcoming) {ping_context["fleet_type"]} Fleet'
+    elif ping_context["is_pre_ping"]:
         webhook_ping_text_header += r"\### PRE PING ###"
 
         if ping_context["fleet_type"]:
-            webhook_ping_text_header += (
-                f' / (Upcoming) {ping_context["fleet_type"]} Fleet'
-            )
+            webhook_ping_text_header += f' / (Upcoming) {ping_context["fleet_type"]} Fleet'
     else:
         if ping_context["fleet_type"]:
             webhook_ping_text_header += f'{ping_context["fleet_type"]} '
@@ -156,6 +152,12 @@ def _get_webhook_ping_context(ping_context: dict) -> dict:
 
     webhook_ping_text_header += "**\n** **"
 
+    if is_reminder_ping:
+        webhook_ping_text_content += "\n**Ping Type:** Reminder Ping"
+
+        if reminder_label:
+            webhook_ping_text_content += f"\n**Reminder Interval:** {reminder_label} before formup"
+
     # Add FC name if we have one
     if ping_context["fleet_commander"]:
         webhook_ping_text_content += f'\n**FC:** {ping_context["fleet_commander"]}'
@@ -166,20 +168,15 @@ def _get_webhook_ping_context(ping_context: dict) -> dict:
 
     # Check if form-up location is available
     if ping_context["formup_location"]:
-        webhook_ping_text_content += (
-            f'\n**Formup Location:** {ping_context["formup_location"]}'
-        )
+        webhook_ping_text_content += f'\n**Formup Location:** {ping_context["formup_location"]}'
 
     # Check if form-up time is available
     if ping_context["is_formup_now"]:
-        webhook_ping_text_content += (
-            f"\n**Formup Time:** NOW (<t:{int(timezone.now().timestamp())}:R>)"
-        )
+        webhook_ping_text_content += f"\n**Formup Time:** NOW (<t:{int(timezone.now().timestamp())}:R>)"
     else:
         if ping_context["formup_time"]["datetime_string"]:
             webhook_ping_text_content += (
-                "\n**Formup (EVE time):** "
-                f'{ping_context["formup_time"]["datetime_string"]}'
+                "\n**Formup (EVE time):** " f'{ping_context["formup_time"]["datetime_string"]}'
             )
 
         if ping_context["formup_time"]["timestamp"]:
@@ -189,9 +186,7 @@ def _get_webhook_ping_context(ping_context: dict) -> dict:
                     "timezones:index",
                     args=[ping_context["formup_time"]["timestamp"]],
                 )
-                webhook_ping_text_content += (
-                    f" ([Time Zone Conversion]({timezones_url}))"
-                )
+                webhook_ping_text_content += f" ([Time Zone Conversion]({timezones_url}))"
 
             # Add local time
             webhook_ping_text_content += (
@@ -202,9 +197,7 @@ def _get_webhook_ping_context(ping_context: dict) -> dict:
 
     # Check if fleet duration is available
     if ping_context["fleet_duration"]:
-        webhook_ping_text_content += (
-            f'\n**Duration (approximately):** {ping_context["fleet_duration"]}'
-        )
+        webhook_ping_text_content += f'\n**Duration (approximately):** {ping_context["fleet_duration"]}'
 
     # Check if fleet comms is available
     if ping_context["fleet_comms"]:
@@ -212,15 +205,11 @@ def _get_webhook_ping_context(ping_context: dict) -> dict:
 
     # Check if doctrine is available
     if ping_context["doctrine"]["name"]:
-        webhook_ping_text_content += (
-            f'\n**Ships / Doctrine:** {ping_context["doctrine"]["name"]}'
-        )
+        webhook_ping_text_content += f'\n**Ships / Doctrine:** {ping_context["doctrine"]["name"]}'
 
         # Grab the doctrine link if there is one
         if ping_context["doctrine"]["link"]:
-            webhook_ping_text_content += (
-                f' ([Doctrine Link]({ping_context["doctrine"]["link"]}))'
-            )
+            webhook_ping_text_content += f' ([Doctrine Link]({ping_context["doctrine"]["link"]}))'
 
     # Check if srp is available
     if ping_context["srp"]["has_srp"]:
@@ -229,15 +218,12 @@ def _get_webhook_ping_context(ping_context: dict) -> dict:
         # Check if we have an SRP link
         if ping_context["srp"]["create_srp_link"] and "link" in ping_context["srp"]:
             webhook_ping_text_content += (
-                f' (SRP Code: [{ping_context["srp"]["link"]["code"]}]'
-                f'({ping_context["srp"]["link"]["link"]}))'
+                f' (SRP Code: [{ping_context["srp"]["link"]["code"]}]' f'({ping_context["srp"]["link"]["link"]}))'
             )
 
     # Check if additional information is available
     if ping_context["additional_information"]:
-        webhook_ping_text_content += (
-            f'\n\n**Additional Information**:\n{ping_context["additional_information"]}'
-        )
+        webhook_ping_text_content += f'\n\n**Additional Information**:\n{ping_context["additional_information"]}'
 
     return {
         "target": webhook_ping_target,

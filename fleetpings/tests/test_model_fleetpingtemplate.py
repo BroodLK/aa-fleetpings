@@ -66,6 +66,7 @@ class TestModelFleetPingTemplate(BaseTestCase):
                 "srp_link": None,
                 "additional_information": "Bring probes",
                 "optimer": None,
+                "reminder_offsets": [],
             },
         )
 
@@ -131,10 +132,7 @@ class TestModelFleetPingTemplate(BaseTestCase):
 
         with self.assertRaisesMessage(
             expected_exception=ValidationError,
-            expected_message=(
-                "Please choose a time zone when you want this template to prefill "
-                "the formup time."
-            ),
+            expected_message=("Please choose a time zone when you want this template to prefill " "the formup time."),
         ):
             template.clean()
 
@@ -153,9 +151,6 @@ class TestModelFleetPingTemplate(BaseTestCase):
 
         with self.assertRaisesMessage(
             expected_exception=ValidationError,
-            expected_message=(
-                "Pre-Ping and Formup NOW must be opposite values when both are set "
-                "on a template."
-            ),
+            expected_message=("Pre-Ping and Formup NOW must be opposite values when both are set " "on a template."),
         ):
             template.clean()

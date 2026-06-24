@@ -2,11 +2,12 @@
 
 {% load i18n %}
 {% load fleetpings %}
+{% load static %}
 
 {% block aa_fleetpings_body %}
-    <div class="row">
+    <div class="row g-4">
         <div class="col-lg-7 mb-3 aa-fleetpings-pingform">
-            <div class="card card-default">
+            <div class="card card-default aa-fleetpings-panel">
                 <div class="card-header aa-fleetpings-ping-header">
                     <span class="card-title">{% translate "Fleet information" %}</span>
                 </div>
@@ -23,7 +24,11 @@
                     {% include "fleetpings/partials/templates/templates.html" %}
                 </div>
 
-                <div class="card card-default aa-fleetpings-pingtext">
+                <div class="mb-3">
+                    {% include "fleetpings/partials/upcoming/upcoming.html" %}
+                </div>
+
+                <div class="card card-default aa-fleetpings-panel aa-fleetpings-pingtext">
                     <div class="card-header aa-fleetpings-ping-header">
                         <span class="card-title">{% translate "Formatted ping text" %}</span>
                     </div>
@@ -35,10 +40,15 @@
             </div>
         </div>
 
+        {% include "fleetpings/partials/upcoming/modal.html" %}
         {% translate "Mandatory information is missing. To create an optimer, you need to provide all of the following information:<br>» FC name<br>» Fleet name<br>» Formup location<br>» Formup time<br>» Ships / Doctrine" as optimerMissingFields %}
         {% translate "Mandatory information is missing. To create an SRP link, you need to provide all of the following information:<br>» Fleet name<br>» Ships / Doctrine" as srpMissingFields %}
         {% translate "Error! Your ping was not copied to your clipboard. Maybe your browser doesn&apos;t support this feature." as copyToClipboardError %}
         {% translate "Success! Your ping text has been copied to your clipboard. Now be a good FC and throw it in your chat so you actually get some people in fleet." as copyToClipboardSuccess %}
+        {% translate "Upcoming reminder updated." as upcomingUpdated %}
+        {% translate "Scheduled reminders cancelled." as upcomingCancelled %}
+        {% translate "Are you sure you want to cancel this upcoming ping without notifying the webhook?" as upcomingConfirmCancelSilent %}
+        {% translate "Are you sure you want to cancel this upcoming ping and send the cancellation notice to the webhook?" as upcomingConfirmCancelNotify %}
 
         <script>
             const fleetpingsSettings = {
@@ -55,7 +65,11 @@
                     fleetComms: '{% url "fleetpings:ajax_get_fleet_comms" %}',
                     fleetDoctrines: '{% url "fleetpings:ajax_get_fleet_doctrines" %}',
                     optimerOverlap: '{% url "fleetpings:ajax_get_optimer_overlap" %}',
-                    templates: '{% url "fleetpings:ajax_get_templates" %}'
+                    templates: '{% url "fleetpings:ajax_get_templates" %}',
+                    upcomingSchedules: '{% url "fleetpings:ajax_get_upcoming_schedules" %}',
+                    upcomingScheduleDetailBase: '{% url "fleetpings:ajax_get_upcoming_schedule_detail" 0 %}',
+                    upcomingScheduleUpdateBase: '{% url "fleetpings:ajax_update_upcoming_schedule" 0 %}',
+                    upcomingScheduleCancelBase: '{% url "fleetpings:ajax_cancel_upcoming_schedule" 0 %}'
                 },
                 translation: {
                     optimer: {
@@ -71,6 +85,12 @@
                     copyToClipboard: {
                         error: '{{ copyToClipboardError|escapejs }}',
                         success: '{{ copyToClipboardSuccess|escapejs }}'
+                    },
+                    upcoming: {
+                        updated: '{{ upcomingUpdated|escapejs }}',
+                        cancelled: '{{ upcomingCancelled|escapejs }}',
+                        confirmCancelSilent: '{{ upcomingConfirmCancelSilent|escapejs }}',
+                        confirmCancelNotify: '{{ upcomingConfirmCancelNotify|escapejs }}'
                     }
                 }
             };
@@ -86,4 +106,5 @@
 
 {% block extra_css %}
     {% include "bundles/jquery-datetimepicker-css.html" %}
+    <link rel="stylesheet" href="{% static 'fleetpings/css/fleetpings.css' %}">
 {% endblock %}

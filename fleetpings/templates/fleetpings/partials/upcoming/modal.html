@@ -1,0 +1,207 @@
+{% load i18n %}
+
+<div
+    id="fleetpings-upcoming-modal"
+    class="modal fade aa-fleetpings-upcoming-modal"
+    tabindex="-1"
+    aria-labelledby="fleetpings-upcoming-modal-label"
+    aria-hidden="true"
+>
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 id="fleetpings-upcoming-modal-label" class="modal-title">
+                    {% translate "Upcoming ping" %}
+                </h5>
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="modal"
+                    aria-label="{% translate 'Close' %}"
+                ></button>
+            </div>
+
+            <div class="modal-body">
+                <div id="fleetpings-upcoming-modal-message" class="mb-3"></div>
+
+                <input id="fleetpings-upcoming-id" type="hidden">
+                <input id="fleetpings-upcoming-formup-timestamp" type="hidden">
+                <input id="fleetpings-upcoming-webhook-embed-color" type="hidden">
+
+                <div class="aa-fleetpings-upcoming-body">
+                    <section class="aa-fleetpings-form-section aa-fleetpings-upcoming-section">
+                        <div class="aa-fleetpings-section-header">
+                            <h6 class="mb-0">{% translate "Fleet details" %}</h6>
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="fleetpings-upcoming-fc">
+                                    {% translate "FC name" %}
+                                </label>
+                                <input id="fleetpings-upcoming-fc" class="form-control" type="text">
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label" for="fleetpings-upcoming-fleet-name">
+                                    {% translate "Fleet name" %}
+                                </label>
+                                <input id="fleetpings-upcoming-fleet-name" class="form-control" type="text">
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label" for="fleetpings-upcoming-formup-location">
+                                    {% translate "Formup location" %}
+                                </label>
+                                <input id="fleetpings-upcoming-formup-location" class="form-control" type="text">
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label" for="fleetpings-upcoming-formup-time">
+                                    {% translate "Formup time" %}
+                                </label>
+                                <input id="fleetpings-upcoming-formup-time" class="form-control" type="datetime-local">
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label" for="fleetpings-upcoming-fleet-duration">
+                                    {% translate "Duration" %}
+                                </label>
+                                <input id="fleetpings-upcoming-fleet-duration" class="form-control" type="text">
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label" for="fleetpings-upcoming-fleet-comms">
+                                    {% translate "Fleet comms" %}
+                                </label>
+                                <input id="fleetpings-upcoming-fleet-comms" class="form-control" type="text">
+                            </div>
+
+                            <div class="col-12">
+                                <div class="form-check mt-1">
+                                    <input id="fleetpings-upcoming-srp" class="form-check-input" type="checkbox">
+                                    <label class="form-check-label" for="fleetpings-upcoming-srp">
+                                        {% translate "SRP" %}
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="aa-fleetpings-form-section aa-fleetpings-upcoming-section">
+                        <div class="aa-fleetpings-section-header">
+                            <h6 class="mb-0">{% translate "Routing" %}</h6>
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="fleetpings-upcoming-ping-target">
+                                    {% translate "Ping target" %}
+                                </label>
+                                <input id="fleetpings-upcoming-ping-target" class="form-control" type="text">
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label" for="fleetpings-upcoming-ping-channel">
+                                    {% translate "Ping to" %}
+                                </label>
+                                <select id="fleetpings-upcoming-ping-channel" class="form-select"></select>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label" for="fleetpings-upcoming-fleet-type">
+                                    {% translate "Fleet type" %}
+                                </label>
+                                <input id="fleetpings-upcoming-fleet-type" class="form-control" type="text">
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label" for="fleetpings-upcoming-doctrine">
+                                    {% translate "Doctrine" %}
+                                </label>
+                                <input id="fleetpings-upcoming-doctrine" class="form-control" type="text">
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label" for="fleetpings-upcoming-doctrine-url">
+                                    {% translate "Doctrine link" %}
+                                </label>
+                                <input id="fleetpings-upcoming-doctrine-url" class="form-control" type="text">
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label" for="fleetpings-upcoming-additional-information">
+                                    {% translate "Additional information" %}
+                                </label>
+                                <textarea
+                                    id="fleetpings-upcoming-additional-information"
+                                    class="form-control"
+                                    rows="5"
+                                ></textarea>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="aa-fleetpings-form-section aa-fleetpings-upcoming-section">
+                        <div class="aa-fleetpings-section-header">
+                            <h6 class="mb-0">{% translate "Reminders" %}</h6>
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <div class="aa-fleetpings-inline-panel aa-fleetpings-upcoming-choice-panel">
+                                    <label class="form-label mb-3">
+                                        {% translate "Reminder intervals" %}
+                                    </label>
+                                    <div id="fleetpings-upcoming-reminder-offsets" class="aa-fleetpings-upcoming-checkboxes"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="aa-fleetpings-form-section aa-fleetpings-upcoming-section">
+                        <div class="aa-fleetpings-section-header">
+                            <h6 class="mb-0">{% translate "Cancellation" %}</h6>
+                        </div>
+
+                        <label class="form-label" for="fleetpings-upcoming-cancel-message">
+                            {% translate "Cancellation message" %}
+                        </label>
+                        <textarea
+                            id="fleetpings-upcoming-cancel-message"
+                            class="form-control"
+                            rows="4"
+                        ></textarea>
+                    </section>
+                </div>
+            </div>
+
+            <div class="modal-footer justify-content-between">
+                <div class="d-flex flex-wrap gap-2">
+                    <button
+                        id="fleetpings-upcoming-cancel-silent"
+                        type="button"
+                        class="btn btn-outline-secondary"
+                    >
+                        {% translate "Cancel Fleet Silently" %}
+                    </button>
+                    <button
+                        id="fleetpings-upcoming-cancel-notify"
+                        type="button"
+                        class="btn btn-outline-danger"
+                    >
+                        {% translate "Cancel Fleet and Notify Channel" %}
+                    </button>
+                </div>
+
+                <button
+                    id="fleetpings-upcoming-save"
+                    type="button"
+                    class="btn btn-primary btn-lg"
+                >
+                    {% translate "Save changes" %}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

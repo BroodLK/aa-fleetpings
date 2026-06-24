@@ -60,6 +60,26 @@ ajax_urls = path(
                 view=views.ajax_get_templates,
                 name="ajax_get_templates",
             ),
+            path(
+                route="get-upcoming-schedules/",
+                view=views.ajax_get_upcoming_schedules,
+                name="ajax_get_upcoming_schedules",
+            ),
+            path(
+                route="get-upcoming-schedule/<int:schedule_id>/",
+                view=views.ajax_get_upcoming_schedule_detail,
+                name="ajax_get_upcoming_schedule_detail",
+            ),
+            path(
+                route="update-upcoming-schedule/<int:schedule_id>/",
+                view=views.ajax_update_upcoming_schedule,
+                name="ajax_update_upcoming_schedule",
+            ),
+            path(
+                route="cancel-upcoming-schedule/<int:schedule_id>/",
+                view=views.ajax_cancel_upcoming_schedule,
+                name="ajax_cancel_upcoming_schedule",
+            ),
         ]
     ),
 )

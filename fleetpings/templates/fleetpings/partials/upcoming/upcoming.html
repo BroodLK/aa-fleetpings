@@ -1,0 +1,21 @@
+{% load i18n %}
+
+<div class="card card-default aa-fleetpings-panel">
+    <div class="card-header aa-fleetpings-ping-header">
+        <span class="card-title">{% translate "Upcoming pings" %}</span>
+    </div>
+
+    <div class="card-body">
+        <div
+            id="fleetpings-upcoming-list"
+            class="aa-fleetpings-upcoming-list"
+            data-loading-message="{% translate 'Loading upcoming reminders...' %}"
+            data-empty-message="{% translate 'No upcoming reminders.' %}"
+            data-error-message="{% translate 'Unable to load upcoming reminders.' %}"
+        >
+            <div class="aa-fleetpings-upcoming-empty small text-muted">
+                {% translate "Loading upcoming reminders..." %}
+            </div>
+        </div>
+    </div>
+</div>

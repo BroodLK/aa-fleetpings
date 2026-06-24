@@ -1,0 +1,328 @@
+.aa-fleetpings {
+    --aa-fleetpings-border: var(--bs-border-color);
+    --aa-fleetpings-muted-bg: var(--bs-tertiary-bg, #f8f9fa);
+    --aa-fleetpings-subtle-bg: var(--bs-secondary-bg, #f8f9fa);
+}
+
+.aa-fleetpings .aa-fleetpings-panel {
+    border: 1px solid var(--aa-fleetpings-border);
+    border-radius: 0.75rem;
+    box-shadow: none;
+    overflow: hidden;
+}
+
+.aa-fleetpings .aa-fleetpings-panel > .card-header {
+    align-items: center;
+    background: var(--aa-fleetpings-muted-bg);
+    border-bottom: 1px solid var(--aa-fleetpings-border);
+    display: flex;
+    min-height: 4rem;
+    padding: 1rem 1.25rem;
+}
+
+.aa-fleetpings .aa-fleetpings-panel > .card-header .card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.aa-fleetpings .aa-fleetpings-panel > .card-body {
+    padding: 1.25rem;
+}
+
+.aa-fleetpings .aa-fleetpings-form {
+    display: grid;
+    gap: 1rem;
+    margin: 0;
+}
+
+.aa-fleetpings .aa-fleetpings-form-section {
+    border: 1px solid var(--aa-fleetpings-border);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+}
+
+.aa-fleetpings .aa-fleetpings-section-header {
+    margin-bottom: 1rem;
+}
+
+.aa-fleetpings .aa-fleetpings-form .form-label {
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+}
+
+.aa-fleetpings .aa-fleetpings-form .form-control,
+.aa-fleetpings .aa-fleetpings-form .form-select {
+    border-color: var(--aa-fleetpings-border);
+    min-height: calc(1.5em + 0.875rem + 2px);
+}
+
+.aa-fleetpings .aa-fleetpings-form textarea.form-control {
+    min-height: 12rem;
+}
+
+.aa-fleetpings .aa-fleetpings-form .form-control:focus,
+.aa-fleetpings .aa-fleetpings-form .form-select:focus {
+    box-shadow: 0 0 0 0.2rem rgba(var(--bs-primary-rgb), 0.15);
+}
+
+.aa-fleetpings .aa-fleetpings-form .form-text,
+.aa-fleetpings .aa-fleetpings-form .text-muted {
+    color: var(--bs-secondary-color, #6c757d) !important;
+}
+
+.aa-fleetpings .aa-fleetpings-inline-panel,
+.aa-fleetpings .aa-fleetpings-toggle-card {
+    background: var(--bs-body-bg);
+    border: 1px solid var(--aa-fleetpings-border);
+    border-radius: 0.65rem;
+    cursor: pointer;
+    padding: 1rem;
+}
+
+.aa-fleetpings .aa-fleetpings-toggle-card .mb-3:last-child,
+.aa-fleetpings .aa-fleetpings-inline-panel .mb-3:last-child {
+    margin-bottom: 0;
+}
+
+.aa-fleetpings .aa-fleetpings-toggle-card .form-check,
+.aa-fleetpings .aa-fleetpings-inline-panel .form-check {
+    margin-bottom: 0;
+}
+
+.aa-fleetpings .fleetpings-formup-time-mode .form-label {
+    display: block;
+}
+
+.aa-fleetpings .aa-fleetpings-choice-group .form-check {
+    align-items: center;
+    border: 1px solid var(--aa-fleetpings-border);
+    border-radius: 999px;
+    display: inline-flex;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    padding: 0.55rem 1rem 0.55rem 2.25rem;
+    position: relative;
+}
+
+.aa-fleetpings .aa-fleetpings-choice-group .form-check-input {
+    float: none;
+    margin: 0;
+    margin-left: -1.2rem;
+}
+
+.aa-fleetpings .aa-fleetpings-subsection-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.aa-fleetpings .fleetpings-reminder-settings .form-check {
+    border: 1px solid var(--aa-fleetpings-border);
+    border-radius: 0.5rem;
+    cursor: pointer;
+    margin-bottom: 0.5rem;
+    padding: 0.65rem 0.9rem 0.65rem 2.35rem;
+}
+
+.aa-fleetpings .fleetpings-reminder-settings .form-check:last-child {
+    margin-bottom: 0;
+}
+
+.aa-fleetpings .fleetpings-reminder-settings .form-check.aa-fleetpings-option-disabled,
+.aa-fleetpings .aa-fleetpings-upcoming-checkboxes .form-check.aa-fleetpings-option-disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.aa-fleetpings .aa-fleetpings-form-actions {
+    align-items: center;
+    border-top: 1px solid var(--aa-fleetpings-border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding-top: 0.5rem;
+}
+
+.aa-fleetpings .aa-fleetpings-form-actions-button .btn {
+    min-width: 12rem;
+}
+
+.aa-fleetpings .aa-fleetpings-sidebar .btn-outline-secondary,
+.aa-fleetpings #fleetpings-template-list .btn,
+.aa-fleetpings #fleetpings-upcoming-list .btn {
+    border-color: var(--aa-fleetpings-border);
+    justify-content: flex-start;
+    padding: 0.85rem 1rem;
+    white-space: normal;
+}
+
+.aa-fleetpings .aa-fleetpings-ping-text {
+    border: 1px solid var(--aa-fleetpings-border);
+    border-radius: 0.75rem;
+    min-height: 14rem;
+    padding: 1rem;
+}
+
+.aa-fleetpings .aa-fleetpings-no-ping {
+    color: var(--bs-secondary-color, #6c757d);
+    min-height: 14rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-empty {
+    align-items: center;
+    border: 1px dashed var(--aa-fleetpings-border);
+    border-radius: 0.75rem;
+    display: flex;
+    justify-content: center;
+    min-height: 8rem;
+    padding: 1rem;
+    text-align: center;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-item {
+    align-items: flex-start;
+    background: var(--bs-body-bg);
+    border: 1px solid var(--aa-fleetpings-border);
+    border-radius: 0.75rem;
+    display: grid;
+    gap: 0.65rem;
+    padding: 1rem;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-item-editable:hover,
+.aa-fleetpings .aa-fleetpings-upcoming-item-editable:focus {
+    border-color: rgba(var(--bs-primary-rgb), 0.35);
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-item-editable {
+    cursor: pointer;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-item-readonly {
+    cursor: default;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-item-header {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-item-title {
+    color: var(--bs-body-color);
+    display: block;
+    font-weight: 600;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-item-meta {
+    color: var(--bs-secondary-color, #6c757d);
+    display: grid;
+    gap: 0.35rem;
+    text-align: left;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-item-stat {
+    display: block;
+    font-size: 0.875rem;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-item-permission {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-item-stat-label {
+    color: var(--bs-body-color);
+    font-weight: 600;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-item-countdown {
+    align-items: center;
+    background: var(--aa-fleetpings-muted-bg);
+    border-radius: 999px;
+    color: var(--bs-secondary-color, #6c757d);
+    display: inline-flex;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    max-width: 100%;
+    padding: 0.4rem 0.75rem;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-modal .modal-content {
+    border: 1px solid var(--aa-fleetpings-border);
+    border-radius: 0.9rem;
+    overflow: hidden;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-modal .modal-header,
+.aa-fleetpings .aa-fleetpings-upcoming-modal .modal-footer {
+    background: var(--aa-fleetpings-muted-bg);
+    border-color: var(--aa-fleetpings-border);
+    padding: 1rem 1.25rem;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-modal .modal-body {
+    padding: 1.25rem;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-body {
+    display: grid;
+    gap: 1rem;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-section {
+    background: var(--bs-body-bg);
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-choice-panel {
+    height: 100%;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-checkboxes {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-checkboxes .form-check {
+    border: 1px solid var(--aa-fleetpings-border);
+    border-radius: 0.5rem;
+    cursor: pointer;
+    margin-bottom: 0;
+    padding: 0.7rem 0.9rem 0.7rem 2.35rem;
+}
+
+.aa-fleetpings .aa-fleetpings-upcoming-modal .modal-footer .btn-lg {
+    min-width: 12rem;
+}
+
+@media (max-width: 991.98px) {
+    .aa-fleetpings .aa-fleetpings-sidebar .position-sticky {
+        position: static !important;
+    }
+
+    .aa-fleetpings .aa-fleetpings-form-actions-button,
+    .aa-fleetpings .aa-fleetpings-form-actions-button .btn {
+        width: 100%;
+    }
+
+    .aa-fleetpings .aa-fleetpings-upcoming-modal .modal-footer,
+    .aa-fleetpings .aa-fleetpings-upcoming-modal .modal-footer > div {
+        width: 100%;
+    }
+
+    .aa-fleetpings .aa-fleetpings-upcoming-modal .modal-footer .btn {
+        width: 100%;
+    }
+}

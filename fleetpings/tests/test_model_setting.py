@@ -3,6 +3,7 @@ Tests for model Setting
 """
 
 # Django
+from django.core.exceptions import ValidationError
 from django.db.utils import IntegrityError
 
 # AA Fleet Pings
@@ -107,3 +108,26 @@ class TestSetting(BaseTestCase):
 
         # Check if both of our objects are identical
         self.assertEqual(first=settings_old, second=settings_first)
+
+    def test_should_validate_daily_digest_webhook_when_verification_is_enabled(self):
+        """
+        Backend digest webhook should use the same Discord verification rules.
+        """
+
+        setting = Setting.get_solo()
+        setting.webhook_verification = True
+        setting.upcoming_fleet_digest_webhook = "https://example.com/webhooks/not-discord"
+
+        with self.assertRaises(expected_exception=ValidationError):
+            setting.clean()
+
+    def test_should_allow_non_discord_daily_digest_webhook_when_verification_is_disabled(self):
+        """
+        Backend digest webhook should accept non-Discord URLs when verification is disabled.
+        """
+
+        setting = Setting.get_solo()
+        setting.webhook_verification = False
+        setting.upcoming_fleet_digest_webhook = "https://example.com/webhooks/not-discord"
+
+        self.assertIsNone(setting.clean())

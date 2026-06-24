@@ -376,3 +376,35 @@ class TestHelperGetWebhookPingContext(BaseTestCase):
         self.assertIn(
             "(SRP Code: [SRP123](http://example.com/srp123))", result["content"]
         )
+
+    def test_generates_distinct_reminder_ping_context(self):
+        """
+        Reminder pings should be labeled differently from the original pre-ping.
+        """
+
+        ping_context = {
+            "ping_target": {"group_id": None, "group_name": None, "at_mention": "@here"},
+            "is_pre_ping": True,
+            "fleet_type": "CTA",
+            "fleet_commander": "John Doe",
+            "fleet_name": "Alpha Fleet",
+            "formup_location": "Jita",
+            "is_formup_now": False,
+            "formup_time": {
+                "datetime_string": "2023-10-01 18:00",
+                "timestamp": "1696173600",
+            },
+            "fleet_duration": None,
+            "fleet_comms": None,
+            "doctrine": {"name": None, "link": None},
+            "srp": {"has_srp": False, "create_srp_link": False},
+            "additional_information": None,
+            "ping_kind": "reminder",
+            "reminder_label": "1h",
+        }
+
+        result = _get_webhook_ping_context(ping_context)
+
+        self.assertIn("Reminder Ping", result["header"])
+        self.assertIn("**Ping Type:** Reminder Ping", result["content"])
+        self.assertIn("**Reminder Interval:** 1h before formup", result["content"])
