@@ -5,6 +5,7 @@ The views
 # pylint: disable=import-outside-toplevel
 
 # Standard Library
+import hashlib
 import json
 from datetime import datetime, timedelta
 from datetime import timezone as datetime_timezone
@@ -12,6 +13,7 @@ from datetime import timezone as datetime_timezone
 # Django
 from django.conf import settings
 from django.contrib.auth.decorators import login_required, permission_required
+from django.core.cache import cache
 from django.core.handlers.wsgi import WSGIRequest
 from django.db.models import Q
 from django.http import Http404, HttpResponse, JsonResponse
@@ -62,6 +64,15 @@ from fleetpings.models import (
 from fleetpings.providers.applogger import AppLogger
 
 logger = AppLogger(my_logger=get_extension_logger(name=__name__))
+
+_DUPLICATE_PING_WINDOW_SECONDS = 30
+
+
+def _duplicate_ping_cache_key(user, cleaned_data: dict) -> str:
+    """Build a stable cache key for an identical ping by the same user."""
+    serialized_data = json.dumps(cleaned_data, sort_keys=True, default=str, separators=(",", ":"))
+    payload_hash = hashlib.sha256(serialized_data.encode("utf-8")).hexdigest()
+    return f"fleetpings:recent-ping:{user.pk}:{payload_hash}"
 
 
 def _get_optimer_overlap(formup_timestamp: str):
@@ -718,6 +729,11 @@ def ajax_create_fleet_ping(request: WSGIRequest) -> HttpResponse:
             if form.cleaned_data["use_main"]:
                 main_character = request.user.profile.main_character
                 form.cleaned_data["fleet_commander"] = main_character.character_name if main_character else ""
+
+            duplicate_key = _duplicate_ping_cache_key(request.user, form.cleaned_data)
+            if not cache.add(duplicate_key, True, timeout=_DUPLICATE_PING_WINDOW_SECONDS):
+                context["message"] = str(_("An identical ping cannot be sent within 30 seconds."))
+                return JsonResponse(context)
 
             # Get ping context
             ping_context = get_ping_context_from_form_data(form_data=form.cleaned_data)

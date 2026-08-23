@@ -8,6 +8,7 @@ $(document).ready(() => {
     /* DOM Elements Cache */
     const elements = {
         form: $('#aa-fleetping-form'),
+        createPing: $('#createPingText'),
 
         // Checkboxes
         prePing: $('#id_pre_ping'),
@@ -1351,6 +1352,10 @@ $(document).ready(() => {
         submitForm: async (event) => {
             event.preventDefault();
 
+            // Prevent duplicate requests from double-taps, especially on mobile.
+            elements.createPing.prop('disabled', true);
+            const unlockCreatePing = () => elements.createPing.prop('disabled', false);
+
             $('.fleetpings-form-message div').remove();
 
             // Validation
@@ -1369,6 +1374,7 @@ $(document).ready(() => {
                     [elements.fleetName.val(), elements.fleetDoctrine.val()],
                     fleetpingsSettings.translation.srp.error.missingFields
                 )) {
+                    unlockCreatePing();
                     return;
                 }
             }
@@ -1382,6 +1388,7 @@ $(document).ready(() => {
                     ],
                     fleetpingsSettings.translation.optimer.error.missingFields
                 )) {
+                    unlockCreatePing();
                     return;
                 }
             }
@@ -1397,6 +1404,8 @@ $(document).ready(() => {
                     '.fleetpings-form-message',
                     'error'
                 );
+
+                unlockCreatePing();
 
                 return;
             }
@@ -1438,6 +1447,7 @@ $(document).ready(() => {
                         );
                     }
                 } else {
+                    unlockCreatePing();
                     utils.showMessage(
                         data.message || 'Something went wrong, no details given.',
                         '.fleetpings-form-message',
@@ -1446,6 +1456,8 @@ $(document).ready(() => {
                 }
             } catch (error) {
                 console.error('Error:', error.message);
+
+                unlockCreatePing();
 
                 utils.showMessage(
                     error.message || 'Something went wrong, no details given.',
