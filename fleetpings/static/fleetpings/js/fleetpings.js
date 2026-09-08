@@ -43,6 +43,7 @@ $(document).ready(() => {
         templateList: $('#fleetpings-template-list'),
         reminderSettings: $('.fleetpings-reminder-settings'),
         reminderOffsets: $('input[name="reminder_offsets"]'),
+        reminderLimitHint: $('.fleetpings-reminder-settings .form-text'),
         upcomingList: $('#fleetpings-upcoming-list'),
         upcomingModal: $('#fleetpings-upcoming-modal'),
         upcomingId: $('#fleetpings-upcoming-id'),
@@ -76,7 +77,83 @@ $(document).ready(() => {
         optimerOverlapRelation: '',
         upcomingSchedules: []
     };
-    const maxReminderSelections = 3;
+    const defaultMaxReminderSelections = 3;
+
+    /**
+     * Parse a configured reminder cap.
+     *
+     * Anything that is not a non-negative whole number (missing attribute, empty string,
+     * garbage) means "not configured" and falls back to the default.
+     *
+     * @param {string|number|null|undefined} value The configured value.
+     * @returns {number} The maximum number of selectable reminder intervals.
+     */
+    const parseMaxReminderSelections = (value) => {
+        if (value === null || typeof value === 'undefined' || String(value).trim() === '') {
+            return defaultMaxReminderSelections;
+        }
+
+        const configured = Number(value);
+
+        return Number.isInteger(configured) && configured >= 0 ? configured : defaultMaxReminderSelections;
+    };
+
+    /**
+     * Get the reminder cap of the fleet type currently selected in the main form.
+     *
+     * @returns {number} The maximum number of selectable reminder intervals.
+     */
+    const getMaxReminderSelections = () => {
+        return parseMaxReminderSelections($('option:selected', elements.fleetType).attr('data-max-reminders'));
+    };
+
+    /**
+     * Get the reminder cap for the upcoming schedule edit modal.
+     *
+     * The modal's fleet type is a plain text input, so the cap cannot be read from an option.
+     * It is stashed on the input from the schedule detail payload instead.
+     *
+     * @returns {number} The maximum number of selectable reminder intervals.
+     */
+    const getUpcomingMaxReminderSelections = () => {
+        return parseMaxReminderSelections(elements.upcomingFleetType.data('max-reminders'));
+    };
+
+    /**
+     * Enforce a reminder selection cap on a set of checkboxes.
+     *
+     * Trims selections down to the cap and disables the still unchecked options once it is
+     * reached. Trimming keeps the first allowed options in DOM order, which is the order of
+     * `PRESET_REMINDER_INTERVALS`, so the reminders furthest from formup survive.
+     *
+     * @param {jQuery} inputs The reminder offset checkboxes.
+     * @param {number} maxSelections The maximum number of allowed selections.
+     * @param {jQuery} changedInput The checkbox that triggered the change, if any.
+     * @returns {void}
+     */
+    const applyReminderSelectionLimit = (inputs, maxSelections, changedInput) => {
+        if (changedInput.length && changedInput.is(':checked') && inputs.filter(':checked').length > maxSelections) {
+            changedInput.prop('checked', false);
+        }
+
+        const checkedInputs = inputs.filter(':checked');
+
+        if (checkedInputs.length > maxSelections) {
+            checkedInputs.slice(maxSelections).prop('checked', false);
+        }
+
+        const shouldDisableUncheckedOptions = inputs.filter(':checked').length >= maxSelections;
+
+        inputs.each((index, element) => {
+            const input = $(element);
+            const isDisabled = shouldDisableUncheckedOptions && !input.is(':checked');
+
+            input
+                .prop('disabled', isDisabled)
+                .closest('.form-check')
+                .toggleClass('aa-fleetpings-option-disabled', isDisabled);
+        });
+    };
 
     const clickableToggleSelector = '.aa-fleetpings-toggle-card, .fleetpings-reminder-settings .form-check, #fleetpings-upcoming-reminder-offsets .form-check';
 
@@ -590,6 +667,10 @@ $(document).ready(() => {
                 dataLoader.loadSelectData(fleetpingsSettings.url.fleetTypes, elements.fleetType)
             ]);
 
+            // The fleet type options, and with them the reminder caps, only exist now, so the
+            // reminder state settled during document ready has to be re-evaluated.
+            elements.fleetType.trigger('change');
+
             // Load autocomplete data
             await Promise.all([
                 dataLoader.loadAutocompleteData(fleetpingsSettings.url.formupLocations, elements.formupLocation, 'id_formup_location'),
@@ -858,7 +939,7 @@ $(document).ready(() => {
                 }
             }
 
-            if (isPrePingChecked && !isFormupNow) {
+            if (isPrePingChecked && !isFormupNow && getMaxReminderSelections() > 0) {
                 elements.reminderSettings.show('fast');
             } else {
                 elements.reminderSettings.hide('fast');
@@ -868,26 +949,37 @@ $(document).ready(() => {
             handlers.syncReminderOffsetSelection();
         },
 
+        /**
+         * Apply the selected fleet type's reminder cap to the main form's reminder offsets.
+         *
+         * @param {Event} [event] The change event, if any.
+         * @returns {void}
+         */
         syncReminderOffsetSelection: (event) => {
-            const changedInput = event && event.target ? $(event.target) : $();
-            let checkedInputs = elements.reminderOffsets.filter(':checked');
+            const maxReminderSelections = getMaxReminderSelections();
 
-            if (changedInput.length && changedInput.is(':checked') && checkedInputs.length > maxReminderSelections) {
-                changedInput.prop('checked', false);
-                checkedInputs = elements.reminderOffsets.filter(':checked');
-            }
+            applyReminderSelectionLimit(
+                elements.reminderOffsets,
+                maxReminderSelections,
+                event && event.target ? $(event.target) : $()
+            );
 
-            const shouldDisableUncheckedOptions = checkedInputs.length >= maxReminderSelections;
+            handlers.updateReminderLimitHint(maxReminderSelections);
+        },
 
-            elements.reminderOffsets.each((index, element) => {
-                const input = $(element);
-                const isDisabled = shouldDisableUncheckedOptions && !input.is(':checked');
+        /**
+         * Advertise the current reminder cap in the reminder offsets help text.
+         *
+         * @param {number} maxReminderSelections The maximum number of selectable intervals.
+         * @returns {void}
+         */
+        updateReminderLimitHint: (maxReminderSelections) => {
+            const translations = fleetpingsSettings.translation.reminders;
+            const hint = maxReminderSelections > 0
+                ? translations.limitHint.replace('%(count)s', String(maxReminderSelections))
+                : translations.limitHintNone;
 
-                input
-                    .prop('disabled', isDisabled)
-                    .closest('.form-check')
-                    .toggleClass('aa-fleetpings-option-disabled', isDisabled);
-            });
+            elements.reminderLimitHint.text(hint);
         },
 
         /**
@@ -954,6 +1046,16 @@ $(document).ready(() => {
 
             setSelectValue(elements.fleetType, templateFields.fleet_type);
             elements.fleetType.trigger('change');
+
+            // Older or restricted fleet types may not be present in the refreshed
+            // select options. Keep the cap carried by the template available while
+            // applying its reminder offsets in that case.
+            if (templateFields.max_reminders !== null && templateFields.max_reminders !== undefined) {
+                const selectedOption = $('option:selected', elements.fleetType);
+                if (!selectedOption.attr('data-max-reminders')) {
+                    selectedOption.attr('data-max-reminders', templateFields.max_reminders);
+                }
+            }
 
             setInputValue(elements.fleetCommander, templateFields.fleet_commander);
             setInputValue(elements.fleetName, templateFields.fleet_name);
@@ -1203,7 +1305,11 @@ $(document).ready(() => {
                 elements.upcomingFleetComms.val(schedule.fleet_comms || '');
                 elements.upcomingSrp.prop('checked', Boolean(schedule.srp));
                 elements.upcomingPingTarget.val(schedule.ping_target || '');
-                elements.upcomingFleetType.val(schedule.fleet_type || '');
+                elements.upcomingFleetType
+                    .val(schedule.fleet_type || '')
+                    // Parse before stashing: jQuery's `.data()` setter is a no-op for
+                    // `undefined`, which would leave the previous schedule's cap in place.
+                    .data('max-reminders', parseMaxReminderSelections(schedule.max_reminders));
                 elements.upcomingDoctrine.val(schedule.fleet_doctrine || '');
                 elements.upcomingDoctrineUrl.val(schedule.fleet_doctrine_url || '');
                 elements.upcomingAdditionalInformation.val(schedule.additional_information || '');
@@ -1219,26 +1325,18 @@ $(document).ready(() => {
             }
         },
 
+        /**
+         * Apply the schedule's reminder cap to the upcoming schedule edit modal.
+         *
+         * @param {Event} [event] The change event, if any.
+         * @returns {void}
+         */
         syncUpcomingReminderOffsetSelection: (event) => {
-            const changedInput = event && event.target ? $(event.target) : $();
-            let checkedInputs = elements.upcomingReminderOffsets.find('input:checked');
-
-            if (changedInput.length && changedInput.is(':checked') && checkedInputs.length > maxReminderSelections) {
-                changedInput.prop('checked', false);
-                checkedInputs = elements.upcomingReminderOffsets.find('input:checked');
-            }
-
-            const shouldDisableUncheckedOptions = checkedInputs.length >= maxReminderSelections;
-
-            elements.upcomingReminderOffsets.find('input').each((index, element) => {
-                const input = $(element);
-                const isDisabled = shouldDisableUncheckedOptions && !input.is(':checked');
-
-                input
-                    .prop('disabled', isDisabled)
-                    .closest('.form-check')
-                    .toggleClass('aa-fleetpings-option-disabled', isDisabled);
-            });
+            applyReminderSelectionLimit(
+                elements.upcomingReminderOffsets.find('input'),
+                getUpcomingMaxReminderSelections(),
+                event && event.target ? $(event.target) : $()
+            );
         },
 
         collectUpcomingSchedulePayload: () => {
@@ -1506,6 +1604,10 @@ $(document).ready(() => {
         const embedColor = utils.sanitizeInput(selectedOption.data('embed-color')) || null;
 
         elements.webhookEmbedColor.val(embedColor);
+
+        // The fleet type carries the reminder cap, which decides whether the reminder
+        // settings are shown at all, so re-run the full visibility pass.
+        handlers.updateCheckboxVisibility();
     });
 
     elements.prePing.on('change', () => {

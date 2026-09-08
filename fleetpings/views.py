@@ -35,13 +35,17 @@ from fleetpings.app_settings import (
     srp_module_is,
     use_fittings_module_for_doctrines,
 )
+from fleetpings.constants import DEFAULT_FLEET_TYPE_NAMES
 from fleetpings.form import FleetPingForm, FleetPingScheduleUpdateForm
 from fleetpings.helper.discord_webhook import (
     ping_discord_cancellation,
     ping_discord_webhook,
 )
 from fleetpings.helper.ping_context import get_ping_context_from_form_data
-from fleetpings.helper.reminders import format_offset_label
+from fleetpings.helper.reminders import (
+    MAX_SELECTED_REMINDER_INTERVALS,
+    format_offset_label,
+)
 from fleetpings.helper.scheduled_pings import (
     can_manage_schedule,
     cancel_schedule,
@@ -145,11 +149,16 @@ def _serialize_schedule_for_detail(schedule: FleetPingSchedule) -> dict:
     Serialize schedule details for the edit modal.
     """
 
+    fleet_type = FleetType.get_enabled_by_name(name=schedule.fleet_type)
+
     return {
         "id": schedule.pk,
         "ping_target": schedule.ping_target,
         "ping_channel": str(schedule.ping_channel_id or ""),
         "fleet_type": schedule.fleet_type,
+        # The modal's fleet type is a free text input, so its reminder cap cannot be read
+        # from an option and has to travel with the payload instead.
+        "max_reminders": (fleet_type.max_reminders if fleet_type else MAX_SELECTED_REMINDER_INTERVALS),
         "fleet_commander": schedule.fleet_commander,
         "fleet_name": schedule.fleet_name,
         "formup_location": schedule.formup_location,
@@ -314,13 +323,15 @@ def ajax_get_fleet_types(request: WSGIRequest) -> HttpResponse:
         .order_by("name")
     )
 
+    # The default fleet types are regular rows since migration 0022, so the setting that
+    # used to gate the hardcoded template options now filters them out of the queryset.
+    if not Setting.objects.get_setting(setting_key=Setting.Field.USE_DEFAULT_FLEET_TYPES):
+        fleet_types = fleet_types.exclude(name__in=DEFAULT_FLEET_TYPE_NAMES)
+
     return render(
         request=request,
         template_name="fleetpings/partials/form/segments/fleet-type.html",
-        context={
-            "fleet_types": fleet_types,
-            "use_default_fleet_types": Setting.objects.get_setting(setting_key=Setting.Field.USE_DEFAULT_FLEET_TYPES),
-        },
+        context={"fleet_types": fleet_types},
     )
 
 

@@ -8,6 +8,7 @@ from typing import Iterable
 
 # Django
 from django.core.exceptions import ValidationError
+from django.utils.functional import lazy
 from django.utils.translation import gettext_lazy as _
 
 # AA Fleet Pings
@@ -16,6 +17,22 @@ from fleetpings.constants import PRESET_REMINDER_INTERVALS
 PRESET_REMINDER_INTERVAL_MAP = {str(minutes): minutes for minutes, _label in PRESET_REMINDER_INTERVALS}
 PRESET_REMINDER_INTERVAL_VALUES = {minutes for minutes, _label in PRESET_REMINDER_INTERVALS}
 MAX_SELECTED_REMINDER_INTERVALS = 3
+
+
+def _reminder_limit_hint(count: int) -> str:
+    """
+    Build the reminder interval help text for a given cap.
+
+    The same msgid is used by the JavaScript, which rewrites this hint whenever the
+    selected fleet type changes its cap, so keep the two in sync.
+    """
+
+    return _("Choose up to %(count)s reminder intervals to post before formup.") % {"count": count}
+
+
+# %-style interpolation on a lazy string evaluates it right away, so the interpolation
+# itself has to be deferred to keep the help text translatable at render time.
+reminder_limit_hint = lazy(_reminder_limit_hint, str)
 
 
 def normalize_selected_offsets(selected_offsets: Iterable[str] | str | None) -> list[int]:
@@ -40,7 +57,10 @@ def normalize_selected_offsets(selected_offsets: Iterable[str] | str | None) -> 
     return sorted(offsets, reverse=True)
 
 
-def validate_selected_offsets(selected_offsets: Iterable[str] | str | None) -> list[int]:
+def validate_selected_offsets(
+    selected_offsets: Iterable[str] | str | None,
+    max_selected: int = MAX_SELECTED_REMINDER_INTERVALS,
+) -> list[int]:
     """
     Validate reminder offsets and return the normalized values.
     """
@@ -55,10 +75,10 @@ def validate_selected_offsets(selected_offsets: Iterable[str] | str | None) -> l
 
     selected_choice_values = {value for value in selected_values if value in PRESET_REMINDER_INTERVAL_MAP}
 
-    if len(selected_choice_values) > MAX_SELECTED_REMINDER_INTERVALS:
+    if len(selected_choice_values) > max_selected:
         raise ValidationError(
             _("Please select no more than %(count)s reminder intervals.")
-            % {"count": MAX_SELECTED_REMINDER_INTERVALS}
+            % {"count": max_selected}
         )
 
     return normalize_selected_offsets(selected_offsets=selected_values)

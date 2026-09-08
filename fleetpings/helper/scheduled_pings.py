@@ -16,7 +16,7 @@ from django.utils import timezone
 # AA Fleet Pings
 from fleetpings.helper.ping_context import get_ping_context_from_form_data
 from fleetpings.helper.reminders import get_future_scheduled_for
-from fleetpings.models import FleetPingReminder, FleetPingSchedule, Webhook
+from fleetpings.models import FleetPingReminder, FleetPingSchedule, FleetType, Webhook
 
 ACTIVE_REMINDER_STATUSES = [
     FleetPingReminder.Status.PENDING,
@@ -87,11 +87,13 @@ def build_schedule_data(cleaned_data: dict) -> dict:
         timestamp=float(cleaned_data["formup_timestamp"]),
         tz=datetime_timezone.utc,
     )
+    fleet_type = FleetType.get_enabled_by_name(name=cleaned_data.get("fleet_type", ""))
 
     return {
         "ping_target": cleaned_data.get("ping_target", ""),
         "ping_channel": ping_channel,
         "fleet_type": cleaned_data.get("fleet_type", ""),
+        "silence_reminders": bool(fleet_type and fleet_type.silence_reminders),
         "fleet_commander": cleaned_data.get("fleet_commander", ""),
         "fleet_name": cleaned_data.get("fleet_name", ""),
         "formup_location": cleaned_data.get("formup_location", ""),
@@ -233,6 +235,8 @@ def build_ping_context_from_schedule(
     if reminder:
         ping_context["ping_kind"] = "reminder"
         ping_context["reminder_label"] = reminder.offset_label()
+        if schedule.silence_reminders:
+            ping_context["ping_target"] = {"group_id": None, "group_name": "", "at_mention": ""}
 
     return ping_context
 

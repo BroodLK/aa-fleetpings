@@ -23,7 +23,11 @@ from django.utils.translation import gettext_lazy as _
 # AA Fleet Pings
 from fleetpings.app_settings import discord_service_installed
 from fleetpings.constants import DISCORD_WEBHOOK_REGEX
-from fleetpings.helper.reminders import format_offset_label
+from fleetpings.helper.reminders import (
+    MAX_SELECTED_REMINDER_INTERVALS,
+    format_offset_label,
+    validate_selected_offsets,
+)
 from fleetpings.managers import SettingManager
 
 # Check if the Discord service is active
@@ -421,6 +425,19 @@ class FleetType(models.Model):
         verbose_name=_("Embed color"),
     )
 
+    # Reminder policy
+    max_reminders = models.PositiveIntegerField(
+        default=MAX_SELECTED_REMINDER_INTERVALS,
+        help_text=_("How many reminders can be scheduled for this fleet type. Set to 0 to disallow reminders."),
+        verbose_name=_("Maximum reminders"),
+    )
+
+    silence_reminders = models.BooleanField(
+        default=False,
+        help_text=_("Do not mention the ping target on reminders."),
+        verbose_name=_("Silence reminders"),
+    )
+
     # Restrictions
     restricted_to_group = models.ManyToManyField(
         to=Group,
@@ -464,6 +481,25 @@ class FleetType(models.Model):
         verbose_name = _("Fleet type")
         verbose_name_plural = _("Fleet types")
         default_permissions = ()
+
+    @classmethod
+    def get_enabled_by_name(cls, name: str | None) -> "FleetType | None":
+        """
+        Look up an enabled fleet type by its name
+
+        Fleet types are referenced by name throughout the pings, since a ping can also
+        carry a free text fleet type that isn't configured here.
+
+        :param name:
+        :type name:
+        :return:
+        :rtype:
+        """
+
+        if not name:
+            return None
+
+        return cls.objects.filter(name=name, is_enabled=True).first()
 
 
 class Webhook(models.Model):
@@ -759,6 +795,16 @@ class FleetPingTemplate(models.Model):
                 message=_("Pre-Ping and Formup NOW must be opposite values when both are " "set on a template.")
             )
 
+        fleet_type = FleetType.get_enabled_by_name(name=self.fleet_type)
+        max_reminders = fleet_type.max_reminders if fleet_type else MAX_SELECTED_REMINDER_INTERVALS
+        try:
+            self.reminder_offsets = validate_selected_offsets(
+                selected_offsets=self.reminder_offsets,
+                max_selected=max_reminders,
+            )
+        except ValidationError as exception:
+            raise ValidationError({"reminder_offsets": exception}) from exception
+
         super().clean()
 
     def __str__(self) -> str:
@@ -773,11 +819,16 @@ class FleetPingTemplate(models.Model):
         Return the template values keyed to the frontend form field names.
         """
 
+        fleet_type = FleetType.get_enabled_by_name(name=self.fleet_type)
+
         return {
             "ping_target": self.ping_target or None,
             "pre_ping": self.pre_ping,
             "ping_channel": self.ping_channel or None,
             "fleet_type": self.fleet_type or None,
+            "max_reminders": (
+                fleet_type.max_reminders if fleet_type else MAX_SELECTED_REMINDER_INTERVALS
+            ),
             "fleet_commander": self.fleet_commander or None,
             "use_main": self.use_main,
             "fleet_name": self.fleet_name or None,
@@ -889,6 +940,8 @@ class FleetPingSchedule(models.Model):
         blank=True,
         verbose_name=_("Fleet type"),
     )
+
+    silence_reminders = models.BooleanField(default=False, verbose_name=_("Silence reminders"))
 
     fleet_commander = models.CharField(
         max_length=255,

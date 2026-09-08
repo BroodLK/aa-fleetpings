@@ -21,8 +21,12 @@ from fleetpings.app_settings import (
     srp_module_installed,
     use_fittings_module_for_doctrines,
 )
-from fleetpings.constants import PRESET_REMINDER_INTERVALS
-from fleetpings.helper.reminders import validate_selected_offsets
+from fleetpings.constants import DEFAULT_FLEET_TYPE_NAMES, PRESET_REMINDER_INTERVALS
+from fleetpings.helper.reminders import (
+    MAX_SELECTED_REMINDER_INTERVALS,
+    reminder_limit_hint,
+    validate_selected_offsets,
+)
 from fleetpings.helper.urls import reverse_absolute
 from fleetpings.models import (
     DiscordPingTarget,
@@ -61,6 +65,20 @@ def _user_groups(user) -> list[Group]:
         return list(user.groups.all())
 
     return []
+
+
+class FleetTypeSelect(forms.Select):
+    """Select widget that exposes each fleet type's reminder policy to Admin JS."""
+
+    def __init__(self, *args, max_reminders_by_name=None, **kwargs):
+        self.max_reminders_by_name = max_reminders_by_name or {}
+        super().__init__(*args, **kwargs)
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex, attrs)
+        if value in self.max_reminders_by_name:
+            option["attrs"]["data-max-reminders"] = str(self.max_reminders_by_name[value])
+        return option
 
 
 def _allowed_webhooks_for_user(user):
@@ -113,8 +131,25 @@ class ReminderOptionsFormMixin:
         choices=_reminder_interval_choices(),
         widget=forms.CheckboxSelectMultiple,
         label=_("Reminder intervals"),
-        help_text=_("Choose up to 3 reminder intervals to post before formup."),
+        help_text=reminder_limit_hint(MAX_SELECTED_REMINDER_INTERVALS),
     )
+
+    def selected_fleet_type(self) -> FleetType | None:
+        """
+        Resolve the selected fleet type, if it is a configured and enabled one.
+
+        The result is cached on the form so later consumers, e.g. `build_schedule_data`,
+        don't have to query for it again.
+
+        :return: The selected fleet type or None
+        :rtype: FleetType | None
+        """
+
+        if not hasattr(self, "_selected_fleet_type"):
+            fleet_type_name = (getattr(self, "cleaned_data", None) or {}).get("fleet_type") or ""
+            self._selected_fleet_type = FleetType.get_enabled_by_name(name=fleet_type_name)
+
+        return self._selected_fleet_type
 
     def clean_reminder_configuration(self, require_future_formup: bool = False):
         """
@@ -123,8 +158,16 @@ class ReminderOptionsFormMixin:
 
         cleaned_data = super().clean()
 
+        # A fleet type may cap how many reminders it allows. Unknown or disabled fleet
+        # types fall back to the global maximum.
+        fleet_type = self.selected_fleet_type()
+        max_reminders = fleet_type.max_reminders if fleet_type else MAX_SELECTED_REMINDER_INTERVALS
+
         try:
-            reminder_offsets = validate_selected_offsets(selected_offsets=cleaned_data.get("reminder_offsets"))
+            reminder_offsets = validate_selected_offsets(
+                selected_offsets=cleaned_data.get("reminder_offsets"),
+                max_selected=max_reminders,
+            )
         except forms.ValidationError as ex:
             self.add_error("reminder_offsets", ex)
             reminder_offsets = []
@@ -323,6 +366,10 @@ class FleetPingTemplateAdminForm(ReminderOptionsFormMixin, forms.ModelForm):
         self.fields["ping_target"].choices = self._get_ping_target_choices()
         self.fields["ping_channel"].choices = self._get_ping_channel_choices()
         self.fields["fleet_type"].choices = self._get_fleet_type_choices()
+        self.fields["fleet_type"].widget = FleetTypeSelect(
+            choices=self.fields["fleet_type"].choices,
+            max_reminders_by_name=self._fleet_type_reminder_limits(),
+        )
         self.fields["formup_location"].choices = self._get_formup_location_choices()
         self.fields["fleet_comms"].choices = self._get_fleet_comms_choices()
         self.fields["fleet_doctrine"].choices = self._get_fleet_doctrine_choices()
@@ -338,6 +385,14 @@ class FleetPingTemplateAdminForm(ReminderOptionsFormMixin, forms.ModelForm):
         self._append_instance_value(field_name="fleet_comms", field_value=self.instance.fleet_comms)
         self._append_instance_value(field_name="fleet_doctrine", field_value=self.instance.fleet_doctrine)
         self._append_instance_value(field_name="formup_time_mode", field_value=self.instance.formup_time_mode)
+
+        # `_append_instance_value` may add a disabled fleet type back to the choices.
+        # Refresh the custom widget so that option and cap data stay in sync.
+        self.fields["fleet_type"].widget.choices = self.fields["fleet_type"].choices
+        if self.instance.fleet_type:
+            fleet_type = FleetType.objects.filter(name=self.instance.fleet_type).first()
+            if fleet_type:
+                self.fields["fleet_type"].widget.max_reminders_by_name[fleet_type.name] = fleet_type.max_reminders
 
         if "fleet_doctrine_url" in self.fields:
             self.fields["fleet_doctrine_url"].widget = forms.HiddenInput()
@@ -428,19 +483,6 @@ class FleetPingTemplateAdminForm(ReminderOptionsFormMixin, forms.ModelForm):
             ("@everyone", "@everyone"),
         ]
 
-    @staticmethod
-    def _default_fleet_type_choices() -> list[tuple[str, str]]:
-        """
-        Get default fleet type choices.
-        """
-
-        return [
-            ("Roaming", _("Roaming Fleet")),
-            ("Home Defense", _("Home Defense")),
-            ("StratOP", _("StratOP")),
-            ("CTA", _("CTA")),
-        ]
-
     def _get_ping_target_queryset(self):
         """
         Get ping targets available to the current admin user.
@@ -502,9 +544,6 @@ class FleetPingTemplateAdminForm(ReminderOptionsFormMixin, forms.ModelForm):
 
         choices = [("", _("Do not prefill"))]
 
-        if self._use_default_fleet_types():
-            choices.extend(self._default_fleet_type_choices())
-
         groups = self._request_groups()
         fleet_types = (
             FleetType.objects.filter(
@@ -515,10 +554,26 @@ class FleetPingTemplateAdminForm(ReminderOptionsFormMixin, forms.ModelForm):
             .order_by("name")
         )
 
+        # The default fleet types are regular rows since migration 0022, so the setting
+        # that used to gate the hardcoded template options now filters them out here.
+        if not self._use_default_fleet_types():
+            fleet_types = fleet_types.exclude(name__in=DEFAULT_FLEET_TYPE_NAMES)
+
         for fleet_type in fleet_types:
             choices.append((fleet_type.name, fleet_type.name))
 
         return choices
+
+    def _fleet_type_reminder_limits(self) -> dict[str, int]:
+        """Return reminder caps for the fleet types available to this Admin form."""
+
+        return dict(
+            FleetType.objects.filter(name__in=[value for value, _label in self.fields["fleet_type"].choices])
+            .values_list("name", "max_reminders")
+        )
+
+    class Media:
+        js = ("fleetpings/js/admin_reminders.js",)
 
     @staticmethod
     def _get_formup_location_choices() -> list[tuple[str, str]]:

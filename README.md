@@ -169,6 +169,15 @@ This is where you set all your stuff up, like the webhooks you want to ping and 
 can ping them, fleet types, comms, formup locations, and so on. It's pretty straight
 forward, so you shouldn't have any issues. Go nuts!
 
+Each fleet type also carries a reminder policy:
+
+- `Maximum reminders` caps how many reminder intervals can be scheduled for a ping of
+  that fleet type. The reminder checkboxes in the form disable themselves once the cap
+  is reached, and the cap is enforced again on the backend. Set it to `0` to hide the
+  scheduled reminder options entirely for that fleet type.
+- `Silence reminders` posts the reminders without mentioning the ping target, so only
+  the initial pre-ping pings people.
+
 ## Updating<a name="updating"></a>
 
 ### Bare Metal Installation<a name="bare-metal-installation-1"></a>
@@ -221,6 +230,10 @@ The following settings are available in the Django Admin Backend under
 
 Enable or disable the default fleet types (Roaming, Home Defense, StratOP, and CTA)
 that are shown in the fleet type dropdown in addition to your own.
+
+These four are regular fleet type entries in the admin backend, so you can give them
+their own embed color, group restrictions, and reminder policy. Disabling this setting
+hides them from the dropdown without deleting them.
 
 **Default:** True
 

@@ -49,6 +49,8 @@
         {% translate "Scheduled reminders cancelled." as upcomingCancelled %}
         {% translate "Are you sure you want to cancel this upcoming ping without notifying the webhook?" as upcomingConfirmCancelSilent %}
         {% translate "Are you sure you want to cancel this upcoming ping and send the cancellation notice to the webhook?" as upcomingConfirmCancelNotify %}
+        {% translate "Choose up to %(count)s reminder intervals to post before formup." as reminderLimitHint %}
+        {% translate "This fleet type does not allow scheduled reminders." as reminderLimitHintNone %}
 
         <script>
             const fleetpingsSettings = {
@@ -91,6 +93,10 @@
                         cancelled: '{{ upcomingCancelled|escapejs }}',
                         confirmCancelSilent: '{{ upcomingConfirmCancelSilent|escapejs }}',
                         confirmCancelNotify: '{{ upcomingConfirmCancelNotify|escapejs }}'
+                    },
+                    reminders: {
+                        limitHint: '{{ reminderLimitHint|escapejs }}',
+                        limitHintNone: '{{ reminderLimitHintNone|escapejs }}'
                     }
                 }
             };
