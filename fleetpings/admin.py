@@ -10,6 +10,8 @@ from django.contrib import admin
 from django.contrib.auth.models import Group
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
+from django.http import HttpResponseRedirect
+from django.urls import path, reverse
 
 # AA Fleet Pings
 from fleetpings.app_settings import (
@@ -406,3 +408,38 @@ class SettingAdmin(SingletonModelAdmin):
     """
 
     form = SettingAdminForm
+    readonly_fields = ("op_board_message_id", "op_board_status")
+    change_form_template = "admin/fleetpings/setting/change_form.html"
+
+    @admin.display(description=_("Op Board status"))
+    def op_board_status(self, obj):
+        if obj.op_board_message_missing:
+            return _("Message was deleted; use Create/repair Op Board message below.")
+        if obj.op_board_message_id:
+            return _("Message is active.")
+        return _("No message has been created yet.")
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from fleetpings.tasks import queue_op_board_refresh
+
+        queue_op_board_refresh()
+
+    def get_urls(self):
+        urls = super().get_urls()
+        return [
+            path("send-op-board/", self.admin_site.admin_view(self.send_op_board), name="fleetpings_setting_send_op_board"),
+            *urls,
+        ]
+
+    def send_op_board(self, request):
+        from aadiscordbot.tasks import run_task_function
+
+        setting = Setting.get_solo()
+        if setting.op_board_channel_id:
+            run_task_function.delay(
+                "fleetpings.bot_tasks.send_op_board",
+                task_args=[setting.op_board_channel_id],
+                task_kwargs={},
+            )
+        return HttpResponseRedirect(reverse("admin:fleetpings_setting_change", args=[setting.pk]))

@@ -1243,12 +1243,7 @@ class Setting(SingletonModel):
         )
         WEBHOOK_VERIFICATION = "webhook_verification", _("Verify webhooks")
         DEFAULT_EMBED_COLOR = "default_embed_color", _("Default embed color")
-        UPCOMING_FLEET_DIGEST_ENABLED = "upcoming_fleet_digest_enabled", _(
-            "Enable upcoming fleet digest webhook"
-        )
-        UPCOMING_FLEET_DIGEST_WEBHOOK = "upcoming_fleet_digest_webhook", _(
-            "Upcoming fleet digest webhook URL"
-        )
+
 
     use_default_fleet_types = models.BooleanField(
         default=True,
@@ -1295,31 +1290,41 @@ class Setting(SingletonModel):
     )
 
     default_embed_color = models.CharField(
-        default="#FAA61A",
+        default="#008080",
         max_length=7,
         blank=True,
         help_text=_("Default highlight color for the webhook embed."),
         verbose_name=Field.DEFAULT_EMBED_COLOR.label,  # pylint: disable=no-member
     )
 
-    upcoming_fleet_digest_enabled = models.BooleanField(
-        default=False,
-        db_index=True,
-        help_text=_(
-            "Whether to send a daily digest of upcoming fleets for the next 7 days "
-            "to the backend-configured webhook."
-        ),
-        verbose_name=Field.UPCOMING_FLEET_DIGEST_ENABLED.label,  # pylint: disable=no-member
+    op_board_channel_id = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        help_text=_("Discord channel ID used for the shared Op Board message."),
+        verbose_name=_("Op Board Discord channel ID"),
     )
 
-    upcoming_fleet_digest_webhook = models.CharField(
-        max_length=255,
+    op_board_message_id = models.PositiveBigIntegerField(
+        null=True,
         blank=True,
-        help_text=_(
-            "Webhook URL for the daily upcoming fleet digest. This webhook is used "
-            "by the backend task and is not exposed as a selectable ping channel."
-        ),
-        verbose_name=Field.UPCOMING_FLEET_DIGEST_WEBHOOK.label,  # pylint: disable=no-member
+        editable=False,
+        help_text=_("Message ID of the shared Op Board message."),
+        verbose_name=_("Op Board message ID"),
+    )
+
+    op_board_message_missing = models.BooleanField(
+        default=False,
+        editable=False,
+        help_text=_("The configured Op Board message was deleted and needs to be recreated."),
+        verbose_name=_("Op Board message missing"),
+    )
+
+    op_board_embed_color = models.CharField(
+        default="#008080",
+        max_length=7,
+        blank=True,
+        help_text=_("Embed color for the shared Op Board message."),
+        verbose_name=_("Op Board embed color"),
     )
 
     objects: ClassVar[SettingManager] = SettingManager()
@@ -1347,10 +1352,5 @@ class Setting(SingletonModel):
         """
         Validate backend webhook settings.
         """
-
-        _validate_webhook_url(
-            url=self.upcoming_fleet_digest_webhook,
-            verify_webhooks=self.webhook_verification,
-        )
 
         super().clean()

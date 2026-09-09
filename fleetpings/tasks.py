@@ -18,15 +18,26 @@ from allianceauth.services.hooks import get_extension_logger
 # AA Fleet Pings
 from fleetpings.helper.discord_webhook import (
     ping_discord_webhook,
-    ping_upcoming_fleet_digest,
 )
 from fleetpings.helper.scheduled_pings import (
     build_ping_context_from_schedule,
-    upcoming_schedules_for_digest,
 )
-from fleetpings.models import FleetPingReminder, Setting
+from fleetpings.models import FleetPingReminder
 
 logger = get_extension_logger(__name__)
+
+
+def queue_op_board_refresh() -> None:
+    """Ask aadiscordbot to edit the shared board message in its bot process."""
+    try:
+        from aadiscordbot.tasks import run_task_function
+    except ImportError:
+        return
+    run_task_function.delay(
+        "fleetpings.bot_tasks.refresh_op_board",
+        task_args=[],
+        task_kwargs={},
+    )
 
 
 def _mark_schedules_if_finished(schedule_ids: list[int]) -> None:
@@ -44,6 +55,8 @@ def _mark_schedules_if_finished(schedule_ids: list[int]) -> None:
 
         seen_schedule_ids.add(reminder.schedule_id)
         reminder.schedule.mark_completed_if_finished()
+
+    queue_op_board_refresh()
 
 
 def _send_due_reminder(reminder: FleetPingReminder) -> None:
@@ -152,29 +165,3 @@ def process_due_reminders() -> None:
         finally:
             if reminder is not None:
                 reminder.schedule.mark_completed_if_finished()
-
-
-@shared_task(name="fleetpings.tasks.post_upcoming_fleet_digest")
-def post_upcoming_fleet_digest() -> None:
-    """
-    Post the daily digest of upcoming fleets for the next 7 days.
-    """
-
-    settings = Setting.get_solo()
-
-    if not settings.upcoming_fleet_digest_enabled:
-        return
-
-    if not settings.upcoming_fleet_digest_webhook:
-        return
-
-    schedules = list(upcoming_schedules_for_digest(days_ahead=7))
-
-    if not schedules:
-        return
-
-    ping_upcoming_fleet_digest(
-        webhook_url=settings.upcoming_fleet_digest_webhook,
-        schedules=schedules,
-        embed_color=settings.default_embed_color or "#FAA61A",
-    )

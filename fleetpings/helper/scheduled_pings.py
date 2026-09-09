@@ -4,7 +4,6 @@ Helpers for scheduled fleet ping reminders.
 
 # Standard Library
 from datetime import datetime
-from datetime import timedelta
 from datetime import timezone as datetime_timezone
 
 # Django
@@ -53,21 +52,6 @@ def upcoming_schedules_for_user(user: User):
         .select_related("creator", "ping_channel")
         .order_by("formup_at", "pk")
     )
-
-
-def upcoming_schedules_for_digest(days_ahead: int = 7):
-    """
-    Return active schedules that form up within the given digest window.
-    """
-
-    now = timezone.now()
-    window_end = now + timedelta(days=days_ahead)
-
-    return FleetPingSchedule.objects.filter(
-        status=FleetPingSchedule.Status.ACTIVE,
-        formup_at__gt=now,
-        formup_at__lte=window_end,
-    ).order_by("formup_at", "pk")
 
 
 def build_schedule_data(cleaned_data: dict) -> dict:
@@ -199,6 +183,9 @@ def create_schedule_from_cleaned_data(
         actor=creator,
     )
 
+    from fleetpings.tasks import queue_op_board_refresh
+
+    transaction.on_commit(queue_op_board_refresh)
     return schedule, created_count, skipped_offsets
 
 
@@ -219,7 +206,11 @@ def update_schedule_from_cleaned_data(
     schedule.full_clean()
     schedule.save()
 
-    return rebuild_schedule_reminders(schedule=schedule, actor=actor)
+    result = rebuild_schedule_reminders(schedule=schedule, actor=actor)
+    from fleetpings.tasks import queue_op_board_refresh
+
+    transaction.on_commit(queue_op_board_refresh)
+    return result
 
 
 def build_ping_context_from_schedule(
@@ -272,3 +263,7 @@ def cancel_schedule(
         status=FleetPingReminder.Status.CANCELLED,
         responded_at=now,
     )
+
+    from fleetpings.tasks import queue_op_board_refresh
+
+    transaction.on_commit(queue_op_board_refresh)

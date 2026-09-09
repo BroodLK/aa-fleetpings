@@ -915,12 +915,18 @@ $(document).ready(() => {
             const isFleetSrpChecked = elements.fleetSrp.is(':checked');
 
             // Handle Optimer visibility
-            if (fleetpingsSettings.optimerInstalled) {
-                if (isPrePingChecked) {
+            if (isPrePingChecked) {
+                if (elements.createOptimer.length) {
                     $('.fleetpings-create-optimer').show('fast');
-                } else {
+                    // A scheduled pre-ping creates an Optimer by default. Users can
+                    // still clear the checkbox before submitting.
+                    elements.createOptimer.prop('checked', true);
+                }
+            } else {
+                if (fleetpingsSettings.optimerInstalled) {
                     $('.fleetpings-create-optimer').hide('fast');
-
+                }
+                if (elements.createOptimer.length) {
                     elements.createOptimer.prop('checked', false);
                 }
             }

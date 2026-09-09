@@ -1,0 +1,12 @@
+{% extends "admin/change_form.html" %}
+{% block object-tools-items %}
+    {% if original and original.op_board_message_missing %}
+        <li><strong style="color: #b94a48;">The Op Board message was deleted. Recreate it below.</strong></li>
+    {% endif %}
+    {% if original and original.op_board_channel_id %}
+        <li>
+            <a href="{% url 'admin:fleetpings_setting_send_op_board' %}">Create/repair Op Board message</a>
+        </li>
+    {% endif %}
+    {{ block.super }}
+{% endblock %}

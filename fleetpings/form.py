@@ -314,7 +314,10 @@ class SettingAdminForm(forms.ModelForm):
 
         model = Setting
         fields = "__all__"
-        widgets = {"default_embed_color": forms.TextInput(attrs={"type": "color"})}
+        widgets = {
+            "default_embed_color": forms.TextInput(attrs={"type": "color"}),
+            "op_board_embed_color": forms.TextInput(attrs={"type": "color"}),
+        }
 
 
 class FleetPingTemplateAdminForm(ReminderOptionsFormMixin, forms.ModelForm):
@@ -792,7 +795,7 @@ class FleetPingForm(ReminderOptionsFormMixin, forms.Form):
         help_text=_get_discord_markdown_hint_text(),
     )
     optimer = forms.BooleanField(
-        initial=False,
+        initial=True,
         required=False,
         label=_("Create Optimer"),
         help_text=_("If this checkbox is active, a fleet operations timer for this pre-ping " "will be created."),
