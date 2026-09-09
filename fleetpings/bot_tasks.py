@@ -17,7 +17,7 @@ async def send_op_board(bot, channel_id: int) -> None:
 
 
 async def refresh_op_board(bot) -> None:
-    """Edit the configured board message in place."""
+    """Edit the configured board message when its fleet data has changed."""
     from fleetpings.helper.op_board import build_op_board_embeds
     from fleetpings.models import Setting
 
@@ -40,4 +40,19 @@ async def refresh_op_board(bot) -> None:
             setting.save(update_fields=["op_board_message_id", "op_board_message_missing"])
             return
         raise
-    await message.edit(embeds=build_op_board_embeds(setting=setting))
+    new_embeds = build_op_board_embeds(setting=setting)
+
+    # Reminder processing queues this task regularly.  The relative Discord
+    # timestamps update client-side, so avoid editing the message when the
+    # actual board contents are unchanged.  The footer contains a render time
+    # and is deliberately excluded from the comparison.
+    current_embeds = [embed.to_dict() for embed in message.embeds]
+    rendered_embeds = [embed.to_dict() for embed in new_embeds]
+    for embeds in (current_embeds, rendered_embeds):
+        for embed in embeds:
+            embed.pop("footer", None)
+
+    if current_embeds == rendered_embeds:
+        return
+
+    await message.edit(embeds=new_embeds)
